@@ -65,10 +65,44 @@ def test_injection_request():
     except Exception as e:
         print(f"x FAIL (Exception): {e}")
 
+def test_anthropic_route():
+    print("\n[TEST 4] Anthropic Route (claude-3-opus)...")
+    payload = {
+        "model": "claude-3-opus",
+        "messages": [{"role": "user", "content": "Hello Claude"}]
+    }
+    try:
+        res = httpx.post(BASE_URL, json=payload, timeout=10.0)
+        print(f"Status: {res.status_code}")
+        print(f"Response: {res.json()}")
+        if res.status_code in [401, 403, 400] and "error" in res.json():
+             print("p PASS (Routing confirmed - Auth failed as expected)")
+        else:
+            print("? INDETERMINATE")
+    except Exception as e:
+        print(f"x FAIL (Exception): {e}")
+
+def test_gemini_route():
+    print("\n[TEST 5] Gemini Route (gemini-pro)...")
+    payload = {
+        "model": "gemini-pro",
+        "messages": [{"role": "user", "content": "Hello Gemini"}]
+    }
+    try:
+        res = httpx.post(BASE_URL, json=payload, timeout=10.0)
+        print(f"Status: {res.status_code}")
+        print(f"Response: {res.json()}")
+        if res.status_code in [400, 403] and "error" in res.json(): # Gemini often 400 for bad key param
+             print("p PASS (Routing confirmed - Auth failed as expected)")
+        else:
+             print("? INDETERMINATE")
+    except Exception as e:
+        print(f"x FAIL (Exception): {e}")
+
 if __name__ == "__main__":
     print("Verifying Enterprise GenAI Gateway...")
-    # Wait a bit for server to be fully ready if running immediately after startup
-    time.sleep(2) 
     test_safe_request()
     test_pii_request()
     test_injection_request()
+    test_anthropic_route()
+    test_gemini_route()

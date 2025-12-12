@@ -11,12 +11,15 @@ from contextlib import asynccontextmanager
 # Local modules
 from guardrails_config import GuardrailsEngine, GuardrailResult
 from logger import init_db, log_request
+from router import LLMRouter
+from adapters import APIAdapter
 
 # Load environment variables
 load_dotenv()
 
 TARGET_LLM_URL = os.getenv("TARGET_LLM_URL", "http://localhost:11434/v1/chat/completions")
 USE_MOCK_LLM = os.getenv("USE_MOCK_LLM", "False").lower() == "true"
+router = LLMRouter()
 
 # --- Pydantic Models (OpenAI Compatible) ---
 
@@ -125,11 +128,10 @@ async def chat_completions(
     
     payload = request.model_dump(exclude_unset=True)
     
-    # 5. Proxy to LLM
+    # 5. Route and Proxy to LLM
     try:
         if USE_MOCK_LLM:
-            # Simulate network delay
-            # await asyncio.sleep(0.5) 
+            # Mock Response Logic
             response_data = {
                 "id": "chatcmpl-mock",
                 "object": "chat.completion",
@@ -139,7 +141,7 @@ async def chat_completions(
                     "index": 0,
                     "message": {
                         "role": "assistant",
-                        "content": f"Mock Response. I received your sanitized message: '{result.sanitized_text}'"
+                        "content": f"Mock Response ({request.model}). Sanitized Input: '{result.sanitized_text}'"
                     },
                     "finish_reason": "stop"
                 }],
@@ -147,21 +149,45 @@ async def chat_completions(
             }
             status_code = 200
         else:
-            # Real Proxy
+            # 5a. Determine Route
+            target_url, headers, adapter_type = router.get_route(request.model)
+            
+            # 5b. Adapt Request
+            if adapter_type == "anthropic":
+                upstream_payload = APIAdapter.openai_to_anthropic(payload)
+            elif adapter_type == "gemini":
+                upstream_payload = APIAdapter.openai_to_gemini(payload)
+            else:
+                # OpenAI / Grok / Local (OpenAI-compatible)
+                upstream_payload = payload
+            
+            # 5c. Send Request
             upstream_response = await http_client.post(
-                TARGET_LLM_URL,
-                json=payload,
-                timeout=60.0 # generous timeout for local LLMs
+                target_url,
+                json=upstream_payload,
+                headers=headers,
+                timeout=60.0
             )
+            
             status_code = upstream_response.status_code
             if status_code != 200:
-                # Setup error handling for upstream
                 try:
-                    response_data = upstream_response.json()
+                    error_data = upstream_response.json()
                 except:
-                    response_data = {"error": "Upstream error", "details": upstream_response.text}
+                    error_data = {"error": "Upstream error", "details": upstream_response.text}
+                
+                # Setup structured error for client
+                response_data = error_data
             else:
-                response_data = upstream_response.json()
+                raw_response = upstream_response.json()
+                
+                # 5d. Adapt Response
+                if adapter_type == "anthropic":
+                    response_data = APIAdapter.anthropic_to_openai(raw_response)
+                elif adapter_type == "gemini":
+                    response_data = APIAdapter.gemini_to_openai(raw_response, model=request.model)
+                else:
+                    response_data = raw_response
 
     except Exception as e:
         status_code = 502 # Bad Gateway
