@@ -1,25 +1,33 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Secure GenAI Gateway</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
     <div class="app-container">
         <!-- Sidebar / Header -->
         <header class="sidebar">
             <div class="brand">
                 <div class="logo">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                        <path d="m9 12 2 2 4-4" />
+                    </svg>
                 </div>
                 <h1>Secure Gateway</h1>
             </div>
-            
+
             <nav class="settings-panel">
                 <div class="setting-group">
                     <label>Target Provider</label>
@@ -31,7 +39,7 @@
                         <option value="grok-1">⚪ xAI Grok</option>
                     </select>
                 </div>
-                
+
                 <div class="status-card">
                     <h3>System Status</h3>
                     <div class="status-indicator online">
@@ -48,12 +56,16 @@
                     <div class="content">System initialized. Secure connection established.</div>
                 </div>
             </div>
-            
+
             <div class="chat-input-area">
                 <div class="input-wrapper">
                     <textarea id="prompt-input" placeholder="Type your prompt here..."></textarea>
                     <button id="send-btn">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="22" y1="2" x2="11" y2="13" />
+                            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                        </svg>
                     </button>
                 </div>
                 <div class="security-badge">
@@ -75,6 +87,9 @@
         </aside>
     </div>
 
+    <div id="toast-container" class="toast-container"></div>
+
     <script src="app.js"></script>
 </body>
+
 </html>

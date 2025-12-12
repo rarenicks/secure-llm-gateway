@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // State
     let currentModel = modelSelect.value;
-    let lastLogId = 0;
+    let lastProcessedLogId = 0; // Track processed logs for notifications
 
     // --- Interaction ---
 
@@ -31,9 +31,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // UI Updates
         promptInput.value = '';
         addMessage('user', text);
-        
+
         // Simulating "Thinking" state could be added here
-        
+
         try {
             const response = await fetch('/v1/chat/completions', {
                 method: 'POST',
@@ -45,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             const data = await response.json();
-            
+
             if (response.ok) {
                 const content = data.choices[0].message.content;
                 addMessage('assistant', content);
@@ -60,7 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             addMessage('system', `⚠️ Connection failed: ${error.message}`);
         }
-        
+
         // Trigger immediate log refresh
         fetchLogs();
     }
@@ -77,25 +77,70 @@ document.addEventListener('DOMContentLoaded', () => {
         addMessage('system', text);
     }
 
+    // --- Toast Notification ---
+    function showToast(message, type = 'success') {
+        const container = document.getElementById('toast-container');
+        if (!container) return; // Safety check
+
+        const toast = document.createElement('div');
+
+        let icon = '✅';
+        let className = 'toast'; // Start invisible
+
+        if (type === 'pii-redacted') {
+            icon = '🛡️';
+            className += ' pii-redacted';
+        }
+
+        toast.className = className;
+        toast.innerHTML = `<span class="toast-icon">${icon}</span> ${escapeHtml(message)}`;
+
+        container.appendChild(toast);
+
+        // Trigger reflow/animation
+        requestAnimationFrame(() => {
+            toast.classList.add('visible');
+        });
+
+        // Remove after 3 seconds
+        setTimeout(() => {
+            toast.classList.remove('visible');
+            setTimeout(() => toast.remove(), 500);
+        }, 3000);
+    }
+
     // --- Real-time Logs ---
 
     async function fetchLogs() {
         try {
             const res = await fetch('/api/logs');
             const logs = await res.json();
-            
+
             if (logs.length > 0) {
-                // Clear empty state if exists
                 if (logList.querySelector('.empty-state')) {
                     logList.innerHTML = '';
                 }
-                
-                // Only prepend new logs. 
-                // Simple implementation: Re-render list if top ID changed to keep it synced.
-                // For a robust system, we'd check IDs. keeping it simple: render all recent.
-                
-                // Optimization: Just replace content if it changed
+
+                // Render Logs
                 renderLogs(logs);
+
+                // Check for new logs and PII redaction
+                // We only check logs newer than what we've seen to avoid spamming on reload
+                const newLogs = logs.filter(l => l.id > lastProcessedLogId);
+
+
+                newLogs.forEach(log => {
+                    // Check if PII was redacted
+                    const isRedacted = log.original_prompt !== log.sanitized_prompt;
+
+                    if (isRedacted && log.verdict === "PASSED") {
+                        showToast("PII Redacted & Secured!", "pii-redacted");
+                    }
+                });
+
+                if (newLogs.length > 0) {
+                    lastProcessedLogId = Math.max(...newLogs.map(l => l.id));
+                }
             }
         } catch (e) {
             console.error("Failed to fetch logs", e);
@@ -104,19 +149,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderLogs(logs) {
         // Simple full re-render for this demo (performance is fine for <20 items)
-        logList.innerHTML = ''; 
-        
+        logList.innerHTML = '';
+
         logs.forEach(log => {
             const card = document.createElement('div');
-            
+
             let statusClass = 'passed';
             if (log.verdict !== 'PASSED') statusClass = log.verdict.includes('BLOCKED') ? 'blocked' : 'failed';
-            
+
             card.className = `log-card ${statusClass}`;
-            
+
             const time = new Date(log.timestamp).toLocaleTimeString();
             const latencyMs = (log.latency * 1000).toFixed(0);
-            
+
             card.innerHTML = `
                 <div class="log-meta">
                     <span>${time}</span>
