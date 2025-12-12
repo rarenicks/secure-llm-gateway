@@ -1,18 +1,21 @@
 import os
 import time
 import httpx
+import sqlite3
+import json
 from typing import List, Optional, Dict, Any, Union
 from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Depends
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 
 # Local modules
-from guardrails_config import GuardrailsEngine, GuardrailResult
-from logger import init_db, log_request
-from router import LLMRouter
-from adapters import APIAdapter
+from app.core.guardrails import GuardrailsEngine, GuardrailResult
+from app.core.logger import init_db, log_request, DB_FILE
+from app.core.router import LLMRouter
+from app.core.adapters import APIAdapter
 
 # Load environment variables
 load_dotenv()
@@ -52,7 +55,7 @@ async def lifespan(app: FastAPI):
     # Shutdown
     pass
 
-app = FastAPI(title="Enterprise GenAI Security Gateway", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Enterprise GenAI Security Gateway", version="2.0.0", lifespan=lifespan)
 guardrails = GuardrailsEngine()
 http_client = httpx.AsyncClient()
 
@@ -61,7 +64,22 @@ http_client = httpx.AsyncClient()
 def get_guardrails():
     return guardrails
 
-# --- Endpoints ---
+# --- API Endpoints ---
+
+@app.get("/api/logs")
+async def get_logs():
+    """Returns the latest 20 audit logs."""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM audit_logs ORDER BY id DESC LIMIT 20")
+        rows = cursor.fetchall()
+        logs = [dict(row) for row in rows]
+        conn.close()
+        return logs
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.post("/v1/chat/completions")
 async def chat_completions(
@@ -206,6 +224,9 @@ async def chat_completions(
     )
 
     return JSONResponse(status_code=status_code, content=response_data)
+
+# --- UI Serving ---
+app.mount("/", StaticFiles(directory="app/static", html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn
