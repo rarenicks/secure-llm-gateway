@@ -151,8 +151,28 @@ For enterprise validation, use the included compliance tool to run a dataset of 
    python tools/compliance_runner.py tests/data/compliance.csv
    ```
    
-3. **View Report**:
+### 3. View Report:
    A detailed `compliance_report.json` will be generated with pass/fail statistics and latency metrics.
+
+---
+
+## 🧱 Hybrid Architecture (Pro)
+
+We support a **Dual-Engine** approach, combining our high-speed internal engine with the ecosystem of **Guardrails AI**.
+
+**1. Semantic Sentinel Engine (Internal)**:
+- **Speed**: <50ms latency.
+- **Role**: Handles PII redaction, regex patterns, and semantic embedding checks.
+
+**2. Guardrails AI (External Library)**:
+- **Role**: Access to specialized community validators.
+- **Integration**: We implemented a custom `GuardrailsAIAdapter` that runs local, key-less validators:
+    - `CompetitorCheck`: Blocks mentions of "Google", "OpenAI" etc.
+    - `ToxicCheck`: Blocks toxicity using local logic.
+
+To enable this, use `configs/hybrid.yaml`.
+
+---
 
 ## ✅ Compliance Verification
 
