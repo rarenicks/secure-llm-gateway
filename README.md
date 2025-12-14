@@ -2,7 +2,6 @@
 
 A robust, enterprise-grade security proxy for Large Language Models (LLMs) built with **FastAPI**. It intercepts, sanitizes, and routes requests to multiple providers (OpenAI, Anthropic, Gemini, Grok) while providing real-time security visualization and semantic analysis.
 
-![Compliance Verification](assets/compliance_verification.png)
 
 ## 🚀 Key Features
 
@@ -51,6 +50,21 @@ A robust, enterprise-grade security proxy for Large Language Models (LLMs) built
 
 ### 🖥️ Dashboard
 Open **[http://localhost:8000](http://localhost:8000)** to access the Real-time Security Dashboard.
+
+---
+
+## 🧠 Semantic Guardrails (How it Works)
+
+Unlike traditional WAFs that block based on keywords (e.g., "bomb", "fraud"), **Semantic Sentinel** understands the *meaning* of a prompt.
+
+1. **Embeddings**: We use a local, quantized model (`all-MiniLM-L6-v2`) to convert user prompts into vector embeddings.
+2. **Cosine Similarity**: The system calculates the distance between the user's prompt and your defined `forbidden_intents`.
+3. **Thresholding**: If the similarity score exceeds your configured threshold (e.g., `0.25`), the request is blocked.
+
+**Example**:
+- **Rule**: Block "Money Laundering"
+- **User Prompt**: "How can I clean the cash from my unregistered business?" (No keywords like "laundering" used).
+- **Result**: **BLOCKED** (Similarity Score: 0.58).
 
 ---
 
@@ -139,6 +153,14 @@ For enterprise validation, use the included compliance tool to run a dataset of 
    
 3. **View Report**:
    A detailed `compliance_report.json` will be generated with pass/fail statistics and latency metrics.
+
+## ✅ Compliance Verification
+
+The **Semantic Sentinel** engine is rigorously tested against adversarial datasets. Below is a snapshot of the **Compliance Runner** blocking 100% of Money Laundering and Financial Crime attempts:
+
+![Compliance Verification](assets/compliance_verification.png)
+
+*Generated via `tools/compliance_runner.py` using `configs/finance.yaml`.*
 
 ## 📂 Architecture
 
