@@ -34,3 +34,6 @@ detectors:
       - "illegal financial activity"
       - "trading based on rumors"
       - "buying stock on non-public info"
+      - "structuring deposits"
+      - "smurfing"
+      - "avoiding reporting requirements"

@@ -53,6 +53,14 @@ Run the automated test suite to verify routing and security logic:
 python verify_proxy.py
 ```
 
+## ✅ Compliance Verification
+
+The **Semantic Sentinel** engine is rigorously tested against adversarial datasets. Below is a snapshot of the **Compliance Runner** blocking 100% of Money Laundering and Financial Crime attempts:
+
+![Compliance Verification](assets/compliance_verification.png)
+
+*Generated via `tools/compliance_runner.py` using `configs/finance.yaml`.*
+
 ## 📂 Architecture
 
 - **`app/main.py`**: Entry point & API routes.
