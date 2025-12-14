@@ -5,7 +5,8 @@ from typing import Tuple, Dict
 class LLMRouter:
     def __init__(self):
         self.openai_key = os.getenv("OPENAI_API_KEY", "")
-        self.anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
+        # Support both standard and user-defined var names
+        self.anthropic_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("CLAUDE_API_KEY", "")
         self.gemini_key = os.getenv("GEMINI_API_KEY", "")
         self.xai_key = os.getenv("XAI_API_KEY", "")
         self.local_url = os.getenv("TARGET_LLM_URL", "http://localhost:11434/v1/chat/completions")

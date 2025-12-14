@@ -368,48 +368,48 @@ textarea {
 .empty-state {
     color: var(--text-secondary);
     text-align: center;
+}
 
-    /* Toast Notification */
-    .toast-container {
-        position: fixed;
-        top: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 9999;
-        pointer-events: none;
-    }
+/* Toast Notification */
+.toast-container {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    pointer-events: none;
+}
 
-    .toast {
-        background: rgba(16, 185, 129, 0.15);
-        /* Success green tint */
-        border: 1px solid var(--accent-success);
-        backdrop-filter: blur(10px);
-        padding: 12px 24px;
-        border-radius: 50px;
-        color: var(--accent-success);
-        font-weight: 500;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-        transform: translateY(-100px);
-        opacity: 0;
-        transition: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-    }
+.toast {
+    background: rgba(16, 185, 129, 0.15);
+    /* Success green tint */
+    border: 1px solid var(--accent-success);
+    backdrop-filter: blur(10px);
+    padding: 12px 24px;
+    border-radius: 50px;
+    color: var(--accent-success);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    transform: translateY(-100px);
+    opacity: 0;
+    transition: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
 
-    .toast.visible {
-        transform: translateY(0);
-        opacity: 1;
-    }
+.toast.visible {
+    transform: translateY(0);
+    opacity: 1;
+}
 
-    .toast.pii-redacted {
-        background: rgba(245, 158, 11, 0.15);
-        /* Amber tint */
-        border-color: #f59e0b;
-        color: #f59e0b;
-    }
+.toast.pii-redacted {
+    background: rgba(245, 158, 11, 0.15);
+    /* Amber tint */
+    border-color: #f59e0b;
+    color: #f59e0b;
+}
 
-    .toast-icon {
-        font-size: 1.2rem;
-    }
+.toast-icon {
+    font-size: 1.2rem;
 }

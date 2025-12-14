@@ -1,4 +1,5 @@
 document.addEventListener('DOMContentLoaded', () => {
+    console.log("APP V4 LOADED - DEBUG MODE ACTIVE");
     const chatHistory = document.getElementById('chat-history');
     const promptInput = document.getElementById('prompt-input');
     const sendBtn = document.getElementById('send-btn');
@@ -79,8 +80,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Toast Notification ---
     function showToast(message, type = 'success') {
+        console.log(`[DEBUG] showToast called with: ${message}`);
         const container = document.getElementById('toast-container');
-        if (!container) return; // Safety check
+        if (!container) {
+            console.error("[DEBUG] Toast container NOT FOUND!");
+            return;
+        }
+        console.log("[DEBUG] Toast container found, appending toast...");
 
         const toast = document.createElement('div');
 

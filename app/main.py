@@ -12,10 +12,16 @@ from dotenv import load_dotenv
 from contextlib import asynccontextmanager
 
 # Local modules
-from app.core.guardrails import GuardrailsEngine, GuardrailResult
 from app.core.logger import init_db, log_request, DB_FILE
 from app.core.router import LLMRouter
 from app.core.adapters import APIAdapter
+
+# New Enterprise Library Imports
+from guardrails_lib.engine import GuardrailsEngine
+from guardrails_lib.core import GuardrailResult
+from examples.pii_guardrail import PIIGuardrail
+from examples.injection_guardrail import PromptInjectionGuardrail
+from examples.secret_guardrail import SecretDetectionGuardrail
 
 # Load environment variables
 load_dotenv()
@@ -55,8 +61,15 @@ async def lifespan(app: FastAPI):
     # Shutdown
     pass
 
-app = FastAPI(title="Enterprise GenAI Security Gateway", version="2.0.0", lifespan=lifespan)
-guardrails = GuardrailsEngine()
+app = FastAPI(title="Enterprise GenAI Security Gateway", version="3.0.0", lifespan=lifespan)
+
+# Initialize Enterprise Guardrails
+guardrails = GuardrailsEngine(guardrails=[
+    PromptInjectionGuardrail(), # Run injection check first (blocking)
+    SecretDetectionGuardrail(), # Block secrets/keys (blocking)
+    PIIGuardrail()              # Then sanitize PII
+])
+
 http_client = httpx.AsyncClient()
 
 # --- Dependencies ---
@@ -190,12 +203,23 @@ async def chat_completions(
             status_code = upstream_response.status_code
             if status_code != 200:
                 try:
-                    error_data = upstream_response.json()
+                    raw_error = upstream_response.json()
+                    # Try to parse out the message depending on provider format
+                    if "error" in raw_error:
+                        if isinstance(raw_error["error"], dict) and "message" in raw_error["error"]:
+                            # Already OpenAI format
+                            response_data = raw_error
+                        elif isinstance(raw_error["error"], dict) and "message" in raw_error["error"]: 
+                            # Anthropic style?
+                             response_data = {"error": {"message": raw_error["error"]["message"]}}
+                        else:
+                             # Generic or Gemini style
+                             msg = str(raw_error["error"])
+                             response_data = {"error": {"message": f"Upstream Error: {msg}"}}
+                    else:
+                        response_data = {"error": {"message": f"Upstream Error: {upstream_response.text}"}}
                 except:
-                    error_data = {"error": "Upstream error", "details": upstream_response.text}
-                
-                # Setup structured error for client
-                response_data = error_data
+                    response_data = {"error": {"message": f"Upstream Error ({status_code}): {upstream_response.text}"}}
             else:
                 raw_response = upstream_response.json()
                 
@@ -209,7 +233,7 @@ async def chat_completions(
 
     except Exception as e:
         status_code = 502 # Bad Gateway
-        response_data = {"error": "Failed to connect to upstream LLM", "details": str(e)}
+        response_data = {"error": {"message": f"Gateway Connection Failed: {str(e)}"}}
 
     # 6. Log Success (Background)
     latency = time.time() - start_time
