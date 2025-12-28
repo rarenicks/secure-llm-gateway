@@ -191,6 +191,25 @@ The **Semantic Sentinel** engine is rigorously tested against adversarial datase
 - **`configs/`**: YAML security definitions.
 - **`tools/`**: Compliance and stress testing scripts.
 
+## 📦 Development & Deployment
+
+### Running Unit Tests
+We use `pytest` for unit and integration testing.
+```bash
+# Run all tests
+./run_tests.sh
+```
+
+### Docker Support
+Build and run the gateway in a container:
+```bash
+# Build image
+docker build -t semantic-sentinel .
+
+# Run container (port 8000)
+docker run -p 8000:8000 semantic-sentinel
+```
+
 ## License
 
 MIT License

@@ -3,10 +3,7 @@ import re
 import logging
 from guardrails_lib.core import BaseGuardrail, GuardrailResult
 from guardrails_lib.topic_guardrail import TopicGuardrail
-# Actually Factory calls Engine(guardrails=[...]). 
-# But the NEW requirement says Engine handles YAML config directly?
-# "Refactor core/engine.py ... Class: GuardrailsEngine ... __init__: Load the YAML config."
-# So Engine will now take config directly, replacing Factory logic or merging it.
+from guardrails_lib.integration import GuardrailsAIAdapter
 
 try:
     from sentence_transformers import SentenceTransformer
@@ -28,6 +25,7 @@ class GuardrailsEngine:
     - Pre-compiled Regex (Performance)
     - Semantic Analysis (Sentence Transformers)
     - PII Redaction
+    - Injection & Leakage Protection
     """
 
     def __init__(self, config: Dict[str, Any]):
@@ -38,16 +36,12 @@ class GuardrailsEngine:
         # --- 1. Pre-compile PII Patterns ---
         self.pii_patterns = []
         if self.detectors.get("pii", {}).get("enabled", False):
-            # Optimisation: Hardcoded common patterns for v2.0 performance
-            # In a real app, these might come from a robust library or config list
-            # We compile them ONCE here.
             patterns = {
                 "EMAIL": r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",
                 "PHONE": r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b",
-                "SSN": r"\b\d{3}-\d{2}-\d{4}\b"
+                "SSN": r"\b\d{3}-\d{2}-\d{4}\b",
+                "CREDIT_CARD": r"\b(?:\d{4}[-\s]?){3}\d{4}\b"
             }
-            # Only enable patterns listed in config or all if vague?
-            # Config says: patterns: ["EMAIL", "PHONE"]
             enabled_keys = self.detectors["pii"].get("patterns", [])
             for key in enabled_keys:
                 if key in patterns:
@@ -63,7 +57,23 @@ class GuardrailsEngine:
                 self.topic_pattern = re.compile(pattern_str, re.IGNORECASE)
                 logger.info(f"[{self.profile_name}] Topics: Compiled regex with {len(block_list)} keywords.")
 
-        # --- 3. Initialize Semantic Model ---
+        # --- 3. Injection & Prompt Leakage ---
+        self.injection_patterns = []
+        if self.detectors.get("injection", {}).get("enabled", False):
+            # Combined list of injection and leakage patterns
+            defaults = [
+                "ignore previous instructions", "ignore all instructions",
+                "system override", "dan mode", "do anything now", "unfiltered",
+                "jailbreak", "developer mode", "system prompt", "original instructions"
+            ]
+            custom = self.detectors["injection"].get("keywords", [])
+            all_keywords = list(set(defaults + custom))
+            if all_keywords:
+                pattern_str = r'\b(' + '|'.join(map(re.escape, all_keywords)) + r')\b'
+                self.injection_patterns.append(re.compile(pattern_str, re.IGNORECASE))
+                logger.info(f"[{self.profile_name}] Injection: Compiled regex with {len(all_keywords)} keywords.")
+
+        # --- 4. Initialize Semantic Model ---
         self.semantic_model = None
         self.forbidden_embeddings = None
         self.semantic_threshold = 0.0
@@ -84,31 +94,39 @@ class GuardrailsEngine:
                         logger.info(f"[{self.profile_name}] Semantic: Encoded {len(intents)} intents. Threshold: {self.semantic_threshold}")
                 except Exception as e:
                     logger.error(f"Failed to load Semantic Model: {e}")
-                    # Fail securely? or just log? User asked to "handle gracefully"
-                    # We will continue without semantic checks but log error.
+
+        # --- 5. External Guardrails AI ---
+        external_config = config.get("guardrails", {}).get("external_hub", {})
+        self.external_guard = GuardrailsAIAdapter(external_config)
+
 
     def validate(self, text: str) -> GuardrailResult:
         """
-        Public compatibility wrapper for existing code.
-        Returns a simplified GuardrailResult.
+        Validates INPUT text.
         """
-        result = self.scan(text)
-        
-        # If any rule triggered, it's invalid
-        is_valid = len(result["triggered_rules"]) == 0
-        
+        result = self.scan(text, source="input")
+        return self._package_result(result)
+
+    def validate_output(self, text: str) -> GuardrailResult:
+        """
+        Validates OUTPUT text (from LLM).
+        """
+        result = self.scan(text, source="output")
+        return self._package_result(result)
+
+    def _package_result(self, result: Dict[str, Any]) -> GuardrailResult:
+        triggered = result["triggered_rules"]
+        is_valid = len(triggered) == 0
         sanitized = result["sanitized_prompt"]
-        reason = ", ".join(result["triggered_rules"]) if not is_valid else ""
+        reason = ", ".join(triggered) if not is_valid else ""
         
-        # Determine action (blocked/redacted/allowed)
         action = "allowed"
         if not is_valid:
-            if "PII:" in reason and len(result["triggered_rules"]) == 1:
-                # If ONLY PII, it's valid but sanitized (technically 'valid' for processing, but modified)
-                # Existing main.py logic expects valid=True for PII unless we return sanitized text
-                # Actually main.py checks "if not result.valid: return 400".
-                # So for PII redaction, we must return valid=True but with changed text.
-                is_valid = True 
+            # If ONLY PII is triggered, we consider it "valid" (redacted) but log it
+            # This allows the request to proceed (or response to be returned) with redaction
+            pii_only = all(t.startswith("PII:") for t in triggered)
+            if pii_only:
+                is_valid = True
                 reason = "PII Redacted"
                 action = "redacted"
             else:
@@ -121,36 +139,43 @@ class GuardrailsEngine:
             action=action
         )
 
-    def scan(self, prompt: str) -> Dict[str, Any]:
+    def scan(self, prompt: str, source: str = "input") -> Dict[str, Any]:
         """
         v2.0 Optimized Scan Pipeline
+        Args:
+            prompt: Text to scan
+            source: "input" or "output"
         """
         triggered = []
         sanitized_prompt = prompt
         semantic_score = 0.0
 
-        # Step 1: PII Redaction
+        # Step 1: PII Redaction (Both Input and Output)
         for name, pattern in self.pii_patterns:
             if pattern.search(sanitized_prompt):
-                # Redact
                 msg = f"<{name}_REDACTED>"
                 sanitized_prompt = pattern.sub(msg, sanitized_prompt)
                 triggered.append(f"PII:{name}")
 
-        # Step 2: Keyword Blocking (Topics)
+        # Step 2: Injection/Leakage (Input Only)
+        if source == "input" and self.injection_patterns:
+            for pat in self.injection_patterns:
+                if pat.search(sanitized_prompt):
+                    triggered.append("Injection:System Prompt Override")
+
+        # Step 3: Keyword Blocking (Topics) - (Both? Maybe output too?)
+        # Let's assume we want to block blacklisted topics in output too (e.g. competitors)
         if self.topic_pattern:
             matches = self.topic_pattern.findall(sanitized_prompt)
             if matches:
                 unique = sorted(list(set(matches)))
                 triggered.append(f"Topic:{','.join(unique)}")
 
-        # Step 3: Semantic Blocking
-        # Only run if no blocking keywords found yet? Or always run?
-        # Usually semantic is heavier, run last.
-        if self.semantic_model and self.forbidden_embeddings is not None:
-            # Encode prompt
+        # Step 4: Semantic Blocking (Input Only typically)
+        # Semantic search is expensive, maybe skip for output unless critical?
+        # For now, let's keep it input only to save latency on response
+        if source == "input" and self.semantic_model and self.forbidden_embeddings is not None:
             prompt_emb = self.semantic_model.encode([sanitized_prompt])
-            # Compute similarity
             scores = cosine_similarity(prompt_emb, self.forbidden_embeddings)[0]
             max_score = float(max(scores))
             semantic_score = max_score
@@ -158,7 +183,16 @@ class GuardrailsEngine:
             if max_score > self.semantic_threshold:
                 triggered.append(f"Semantic:Intent violation ({max_score:.2f})")
             
-            logger.info(f"Semantic Check: Score={max_score:.4f} Threshold={self.semantic_threshold} Prompt='{sanitized_prompt[:30]}...'")
+            logger.info(f"Semantic Check ({source}): Score={max_score:.4f} Threshold={self.semantic_threshold}")
+
+        # Step 5: External Guardrails Check
+        if self.external_guard.enabled:
+            # Maybe adapter handles source logic? or just valid method?
+            # Assuming input only for external for now
+            if source == "input":
+                ext_error = self.external_guard.validate(sanitized_prompt)
+                if ext_error:
+                    triggered.append(f"External: {ext_error}")
 
         return {
             "sanitized_prompt": sanitized_prompt,

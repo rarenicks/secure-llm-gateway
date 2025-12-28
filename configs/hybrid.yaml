@@ -1,0 +1,24 @@
+name: "Hybrid_Guardrails_v3"
+
+guardrails:
+  pii:
+    enabled: true
+  
+  topics:
+    enabled: true
+    blacklist:
+      - "project_x"
+  
+  semantic_blocking:
+    enabled: true
+    threshold: 0.25
+    forbidden_intents:
+      - "stealing code"
+
+  external_hub:
+    enabled: true
+    competitors:
+      - "Google"
+      - "Anthropic"
+      - "OpenAI"
+    toxicity_check: true

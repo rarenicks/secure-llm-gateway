@@ -7,4 +7,6 @@ aiofiles==24.1.0
 pyyaml==6.0
 sentence-transformers
 scikit-learn
-pydantic>=2.0
+guardrails-ai
+pytest
+pytest-asyncio

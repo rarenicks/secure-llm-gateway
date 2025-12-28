@@ -17,6 +17,7 @@ from contextlib import asynccontextmanager
 from app.core.logger import init_db, log_request, DB_FILE
 from app.core.router import LLMRouter
 from app.core.adapters import APIAdapter
+from app.core.rate_limit import RateLimitMiddleware
 
 # New Enterprise Library Imports
 from guardrails_lib.engine import GuardrailsEngine
@@ -88,6 +89,7 @@ async def lifespan(app: FastAPI):
     pass
 
 app = FastAPI(title="Semantic Sentinel Gateway", version="3.1.0", lifespan=lifespan)
+app.add_middleware(RateLimitMiddleware, max_requests=100, window_seconds=60)
 
 # Initialize Enterprise Guardrails from Config Profile
 # This is the "Sentinel Framework" in action
@@ -167,23 +169,18 @@ async def chat_completions(
     last_user_message = next((m for m in reversed(request.messages) if m.role == "user"), None)
     
     if not last_user_message:
-        # If no user message found, just pass through or error? 
-        # For security, let's assume valid requests must have a user prompt.
-        # But system messages might be present. Let's scan the last message regardless of role if 'user' specific logic matches.
-        # For this MVP, we focus on the last message.
         input_text = request.messages[-1].content if request.messages else ""
     else:
         input_text = last_user_message.content
 
     client_ip = raw_request.client.host if raw_request.client else "unknown"
 
-    # 2. Apply Guardrails
+    # 2. Apply Guardrails (Input)
     result: GuardrailResult = guards.validate(input_text)
     
     # 3. Handle Blocked Requests
-    if not result.valid:
+    if not result.valid and result.action == "blocked":
         latency = time.time() - start_time
-        # Log failure
         background_tasks.add_task(
             log_request,
             client_ip=client_ip,
@@ -206,16 +203,8 @@ async def chat_completions(
         )
 
     # 4. Reconstruct Request with Sanitized Input
-    # We update the *last* user message content with the sanitized version.
-    # This ensures PII is stripped before sending to LLM.
     if last_user_message:
         last_user_message.content = result.sanitized_text
-        # Note: request.messages is a list of objects, modifying the object *in place* might work if it's mutable,
-        # but Pydantic v2 models are often immutable if frozen. 
-        # Default BaseModel is not frozen.
-        
-        # Let's verify we are actually updating the list used for the downstream request.
-        # We need to reconstruct the payload dict.
     
     payload = request.model_dump(exclude_unset=True)
     
@@ -264,16 +253,12 @@ async def chat_completions(
             if status_code != 200:
                 try:
                     raw_error = upstream_response.json()
-                    # Try to parse out the message depending on provider format
                     if "error" in raw_error:
                         if isinstance(raw_error["error"], dict) and "message" in raw_error["error"]:
-                            # Already OpenAI format
                             response_data = raw_error
                         elif isinstance(raw_error["error"], dict) and "message" in raw_error["error"]: 
-                            # Anthropic style?
                              response_data = {"error": {"message": raw_error["error"]["message"]}}
                         else:
-                             # Generic or Gemini style
                              msg = str(raw_error["error"])
                              response_data = {"error": {"message": f"Upstream Error: {msg}"}}
                     else:
@@ -291,6 +276,29 @@ async def chat_completions(
                 else:
                     response_data = raw_response
 
+        # --- Output Guardrails (New) ---
+        if status_code == 200 and "choices" in response_data and response_data["choices"]:
+            # Check the first choice content
+            output_msg = response_data["choices"][0]["message"]
+            output_text = output_msg.get("content", "")
+            
+            if output_text:
+                out_result = guards.validate_output(output_text)
+                
+                if not out_result.valid and out_result.action == "blocked":
+                    # Block the response
+                    status_code = 400
+                    response_data = {
+                        "error": {
+                            "message": f"Response blocked by security guardrails: {out_result.reason}",
+                            "type": "invalid_request_error",
+                            "code": "security_policy_violation_output"
+                        }
+                    }
+                elif out_result.sanitized_text != output_text:
+                    # Redact content
+                    response_data["choices"][0]["message"]["content"] = out_result.sanitized_text
+
     except Exception as e:
         status_code = 502 # Bad Gateway
         response_data = {"error": {"message": f"Gateway Connection Failed: {str(e)}"}}
@@ -300,9 +308,9 @@ async def chat_completions(
     background_tasks.add_task(
         log_request,
         client_ip=client_ip,
-        original_prompt=input_text, # We verify original
-        sanitized_prompt=result.sanitized_text, # We verify sanitized
-        verdict="PASSED" if status_code == 200 else f"FAILED_UPSTREAM_{status_code}",
+        original_prompt=input_text, 
+        sanitized_prompt=result.sanitized_text,
+        verdict="PASSED" if status_code == 200 else f"FAILED_{status_code}",
         latency=latency,
         metadata={"model": request.model, "mock": USE_MOCK_LLM}
     )
