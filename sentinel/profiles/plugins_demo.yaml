@@ -1,0 +1,13 @@
+profile_name: "Plugin_Architecture_Demo"
+description: "Showcase of the Plugin Architecture. Uses LangKit (Whylogs) to score toxicity and injection risk in real-time."
+detectors:
+  pii:
+    enabled: true
+    engine: "regex"
+  injection:
+    enabled: true
+plugins:
+  langkit:
+    enabled: true
+    threshold: 0.6
+    modules: ["toxicity", "injections"]

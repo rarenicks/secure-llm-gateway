@@ -1,4 +1,5 @@
 profile_name: "Healthcare_v1"
+description: "HIPAA-aligned profile. Aggressively redacts medical record numbers and blocks discussion of specific diagnoses or prescriptions."
 detectors:
   pii:
     enabled: true

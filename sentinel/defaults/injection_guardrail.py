@@ -1,5 +1,5 @@
 from typing import List, Optional
-from guardrails_lib.core import BaseGuardrail, GuardrailResult
+from sentinel.core import BaseGuardrail, GuardrailResult
 
 class PromptInjectionGuardrail(BaseGuardrail):
     def __init__(self, keywords: Optional[List[str]] = None):

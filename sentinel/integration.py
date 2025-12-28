@@ -1,10 +1,25 @@
 from typing import List, Dict, Any, Optional
 import os
 import logging
-from guardrails import Guard, Validator, register_validator
-from guardrails.validators import FailResult, PassResult, ValidationResult
 
 logger = logging.getLogger("sentinel_engine")
+
+try:
+    from guardrails import Guard, Validator, register_validator
+    from guardrails.validators import FailResult, PassResult, ValidationResult
+    GUARDRAILS_AVAILABLE = True
+except ImportError:
+    GUARDRAILS_AVAILABLE = False
+    # Dummy classes to prevent NameError
+    Guard = None
+    Validator = object
+    def register_validator(*args, **kwargs):
+        def decorator(cls):
+            return cls
+        return decorator
+    FailResult = None
+    PassResult = None
+    ValidationResult = None
 
 # -------------------------------------------------------------------------
 # Custom Production Validators (Run Locally, No API Key Required)
@@ -17,10 +32,15 @@ class CompetitorCheck(Validator):
     This is a local, custom implementation of the logic to avoid Hub dependencies.
     """
     def __init__(self, competitors: List[str], on_fail: str = "fix"):
+        if not GUARDRAILS_AVAILABLE:
+            return
         super().__init__(on_fail=on_fail)
         self.competitors = [c.lower() for c in competitors]
 
-    def validate(self, value: Any, metadata: Dict = {}) -> ValidationResult:
+    def validate(self, value: Any, metadata: Dict = {}) -> Any:
+        if not GUARDRAILS_AVAILABLE:
+            return None
+            
         found = []
         val_lower = str(value).lower()
         for comp in self.competitors:
@@ -37,9 +57,14 @@ class CompetitorCheck(Validator):
 @register_validator(name="sentinel/toxic_check", data_type="string")
 class ToxicCheck(Validator):
     def __init__(self, on_fail: str = "fix"):
+        if not GUARDRAILS_AVAILABLE:
+            return
         super().__init__(on_fail=on_fail)
         
-    def validate(self, value: Any, metadata: Dict = {}) -> ValidationResult:
+    def validate(self, value: Any, metadata: Dict = {}) -> Any:
+        if not GUARDRAILS_AVAILABLE:
+            return None
+
         # Simple local regex for demo purposes (Pro would use a local model)
         toxic_words = ["stupid", "ugly", "idiot", "dumb"]
         found = [w for w in toxic_words if w in str(value).lower()]
@@ -61,6 +86,10 @@ class GuardrailsAIAdapter:
         self.guard = None
         
         if not self.enabled:
+            return
+
+        if not GUARDRAILS_AVAILABLE:
+            logger.warning("GuardrailsAI enabled in config but 'guardrails-ai' not installed. Skipping.")
             return
 
         self._setup_guard(config)

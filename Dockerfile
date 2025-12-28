@@ -4,6 +4,8 @@ FROM python:3.10-slim
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV TARGET_LLM_URL="http://host.docker.internal:11434/v1/chat/completions"
+ENV WHYLOGS_NO_ANALYTICS="True"
 
 # Set work directory
 WORKDIR /app
@@ -14,6 +16,7 @@ WORKDIR /app
 # Install python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m spacy download en_core_web_lg
 
 # Copy project
 COPY . .

@@ -1,64 +1,128 @@
-# Semantic Sentinel Gateway (v2.0)
+# Secure GenAI Gateway & Sentinel Framework
 
-A robust, enterprise-grade security proxy for Large Language Models (LLMs) built with **FastAPI**. It intercepts, sanitizes, and routes requests to multiple providers (OpenAI, Anthropic, Gemini, Grok) while providing real-time security visualization and semantic analysis.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/release/python-3100/)
+[![Package](https://img.shields.io/badge/pypi-v0.0.1-blue.svg)](https://pypi.org/project/semantic-sentinel/)
 
+A production-ready, enterprise-grade security framework for Large Language Models (LLMs). Use it as a **Standalone Gateway** (Docker) or import it as a **Python Library** (`sentinel`) to build your own AI firewalls.
+
+![Security Stream](assets/security_stream_v5.png)
+
+## 🐍 Python Library Usage
+
+Install the framework directly into your Python application:
+
+```bash
+pip install .   # Install from source
+# OR
+pip install semantic-sentinel  # (Coming soon to PyPI)
+```
+
+```python
+from sentinel.factory import GuardrailsFactory
+
+# 1. Load a security profile (e.g. Finance, Healthcare)
+engine = GuardrailsFactory.load("finance")
+
+# 2. Validate user input
+input_text = "How do I commit insider trading?"
+result = engine.validate(input_text)
+
+if not result.valid:
+    print(f"Blocked: {result.reason}")
+    # Output: Blocked: Semantic:Intent violation (0.85)
+```
+
+---
 
 ## 🚀 Key Features
 
-- **🧠 Semantic Intent Analysis**: Uses local embeddings (`sentence-transformers`) to block adversarial attacks based on *intent* (e.g., "Money Laundering", "Insider Trading") rather than just keywords.
-- **🛡️ Real-time Guardrails**: 
-    - **PII Redaction**: Automatically detects and replaces sensitive info (Emails, Phones) with `<REDACTED>` tags.
-    - **Injection Blocking**: Stops jailbreak attempts (e.g., "Ignore previous instructions") instantly.
-    - **Topic Filtering**: Configurable regex blocking for domain-specific keywords.
-- **🔄 Dynamic Security Profiles**: Switch between different security policies (e.g., Finance, Healthcare, Default) instantly via the UI without restarting.
-- **⚡ Multi-Provider Routing**: Seamlessly route to OpenAI, Anthropic (Claude), Google (Gemini), xAI (Grok), or Local LLMs based on the model name.
-- **📊 Interactive Dashboard**:
-    - **Live Chat Interface**: Chat with any supported model.
-    - **Security Stream**: Watch requests get scanned and blocked in real-time.
-    - **Visual Feedback**: Premium toast notifications when PII is intercepted.
-- **📝 Audit Logging**: Asynchronous SQLite logging of every request, verdict, and latency.
-- **📉 Compliance Reporting**: Automated tools to stress-test your guardrails and generate JSON audits with pass/fail rates.
+### 🛡️ Core Protections
+- **Semantic Intent Blocking**: Blocks adversarial attacks based on *intent* (e.g., "Money Laundering", "Insider Trading") using local embeddings (`sentence-transformers`), catching what keywords miss.
+- **Enterprise PII Redaction**:
+    - **Microsoft Presidio**: Context-aware redaction (NER) for high-accuracy masking of Names, Locations, and Dates.
+    - **Regex Fallback**: High-speed pattern matching for Credit Cards, SSNs, and Phones.
+- **Injection & Jailbreak Defense**: Instantly blocks prompts like "Ignore previous instructions" or "DAN Mode".
+
+### 🔌 Extensibility & Plugins
+- **Plugin Architecture**: Extend functionality with Python plugins.
+    - **LangKit Integration**: Real-time toxicity scoring and injection analysis using `whylogs[langkit]`.
+    - **Custom Validators**: Write your own checks in `guardrails_lib/plugins/`.
+
+### 🎓 Educational UI & Experimentation
+- **Profile Inspector (ℹ️)**: Visualize active rules for any profile directly in the UI.
+- **Custom Profile Builder (+)**: Create, test, and save custom security configs (YAML) via the web interface.
+- **Live Audit Stream**: Watch requests get scanned, redacted, and blocked in real-time.
+
+### 🔄 Dynamic Security Profiles
+Values encoded in **YAML** files. Switch policies instantly without restarts:
+- **`finance.yaml`**: Strict insider trading & financial PII rules.
+- **`healthcare.yaml`**: HIPAA-aligned (Medical Record redaction).
+- **`presidio_pro.yaml`**: Spacy/Presidio-powered NLP analysis.
+
+## ✨ Feature Matrix
+
+| Category | Feature | Description |
+|----------|---------|-------------|
+| **Security** | **Semantic Blocking** | Blocks requests based on intent (e.g., "crime") even without keywords. |
+| | **PII Redaction** | Context-aware removal of Phones, Emails, SSNs, and Names. |
+| | **Injection Defense** | Prevents "jailbreak" attempts and prompt leakage. |
+| | **Secret Detection** | Stops API keys and credentials from leaking upstream. |
+| | **Profanity Filter** | Sanitizes offensive language from inputs. |
+| **Connectivity** | **Multi-Provider** | Route to OpenAI, Anthropic, Gemini, Grok, or Local LLMs. |
+| | **Local Fallback** | Seamlessly integrates with Ollama/LocalAI for private inference. |
+| **Observability** | **Real-time Dashboard** | Live view of all traffic, blocks, and latency metrics. |
+| | **Audit Logging** | SQLite database tracking every request verdict. |
+| | **Toast Notifications** | Immediate visual feedback when PII is intercepted. |
+| **Extensibility** | **Plugin System** | Add Python plugins (e.g., LangKit) for custom logic. |
+| | **YAML Configuration** | No-code policy management via profile files. |
+| | **Custom Builder** | Create and test new profiles directly in the UI. |
+
+---
+
+---
 
 ## 🛠️ Quick Start
 
-### Prerequisites
-- Python 3.10+
-- (Optional) API Keys for OpenAI/Anthropic/Gemini/Grok
+### Option 1: Docker (Recommended)
+Getting started is as simple as running a container. We bundle Spacy models and all dependencies.
 
-### Installation
+```bash
+# 1. Build the image
+docker build -t secure-llm-gateway .
 
-1. **Clone & Setup**:
-   ```bash
-   git clone https://github.com/rarenicks/secure-llm-gateway.git
-   cd secure-llm-gateway
-   python3 -m venv venv
-   source venv/bin/activate
-   pip install -r requirements.txt
-   ```
+# 2. Run (Port 8000)
+docker run -p 8000:8000 \
+  -e OPENAI_API_KEY=sk-... \
+  -e ANTHROPIC_API_KEY=sk-... \
+  secure-llm-gateway
+```
 
-2. **Configuration**:
-   Copy `.env` and add your keys:
-   ```env
-   OPENAI_API_KEY=sk-...
-   ANTHROPIC_API_KEY=sk-ant-...
-   ```
+Access the dashboard at **[http://localhost:8000](http://localhost:8000)**.
 
-3. **Run the Gateway**:
-   ```bash
-   uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-   ```
+### Option 2: Local Python Dev
+```bash
+git clone https://github.com/rarenicks/secure-llm-gateway.git
+cd secure-llm-gateway
 
-### 🖥️ Dashboard
-Open **[http://localhost:8000](http://localhost:8000)** to access the Real-time Security Dashboard.
+# Setup Venv
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Download Spacy Model for Presidio
+python -m spacy download en_core_web_lg
+
+# Run
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+```
 
 ---
 
 ## 🧠 Semantic Guardrails (How it Works)
 
-Unlike traditional WAFs that block based on keywords (e.g., "bomb", "fraud"), **Semantic Sentinel** understands the *meaning* of a prompt.
-
 1. **Embeddings**: We use a local, quantized model (`all-MiniLM-L6-v2`) to convert user prompts into vector embeddings.
-2. **Cosine Similarity**: The system calculates the distance between the user's prompt and your defined `forbidden_intents`.
+2. **Cosine Similarity**: The system calculates the distance between the user's prompt and your defined `forbidden_intents` (e.g., "Violating Safety Protocols").
 3. **Thresholding**: If the similarity score exceeds your configured threshold (e.g., `0.25`), the request is blocked.
 
 **Example**:
@@ -68,148 +132,76 @@ Unlike traditional WAFs that block based on keywords (e.g., "bomb", "fraud"), **
 
 ---
 
-## 🦙 Local LLM Support (Ollama / LocalAI)
+## 🔧 Configuration Guide
 
-The gateway supports local inference out of the box.
+Security profiles are YAML files. You can use the built-in profiles (like `finance`, `healthcare`) or load your own custom file.
 
-1. **Run Ollama**:
-   ```bash
-   ollama serve
-   ollama pull llama3
-   ```
+**Loading a built-in profile:**
+```python
+engine = GuardrailsFactory.load("finance")
+```
 
-2. **Connect Gateway**:
-   By default, the gateway routes unknown models to `http://localhost:11434/v1/chat/completions`.
-   
-   To use a custom URL, add this to your `.env`:
-   ```env
-   TARGET_LLM_URL=http://localhost:8080/v1/chat/completions
-   ```
+**Loading a custom profile:**
+```python
+engine = GuardrailsFactory.load("/path/to/my_policy.yaml")
+```
 
-3. **Chat**:
-   In the dashboard, simply type **`llama3`** (or your local model name) into the model field. The gateway will automatically route requests to your local instance while still applying all security guardrails.
-
----
-
-## 🔧 Extending for Your Domain
-
-Semantic Sentinel is designed to be **Configuration-Driven**. You can create custom security profiles for specific use cases (e.g., Legal, HR, Finance) by creating simple YAML files.
-
-### 1. Create a Config File
-Create a new file in `configs/my_domain.yaml`:
-
+**Example Profile (`my_policy.yaml`):**
 ```yaml
-name: "My_Domain_Policy_v1"
+profile_name: "Corporate_Policy_v1"
+description: "Blocks competitor mentions and protects source code."
 
-guardrails:
+detectors:
   pii:
-    enabled: true  # Redact Email, Phone, SSN
-    
-  topics:
     enabled: true
-    blacklist:
-      - "competitor_name"
-      - "proprietary_project_code"
-      
+    engine: "presidio" # or "regex"
+  
+  injection:
+    enabled: true
+    
   semantic_blocking:
     enabled: true
-    threshold: 0.25 # Lower = Stricter (0.0 to 1.0)
+    threshold: 0.25
     forbidden_intents:
-      - "violating company nda"
-      - "leaking trade secrets"
-      - "harassment or toxicity"
+      - "leaking source code"
+      - "disparaging competitors"
+      
+plugins:
+  langkit:
+    enabled: true
+    modules: ["toxicity", "injections"]
 ```
 
-### 2. Activate Your Profile
-1. Go to the dashboard at `http://localhost:8000`.
-2. Use the **Security Profile** dropdown in the sidebar.
-3. Select `my_domain.yaml`.
-4. Your new rules are now live!
-
 ---
 
-## 🧪 Testing & Auditing
+## 🧪 Verification & Testing
 
-### Manual Testing with Chatbot
-Use the built-in chat interface to attempt "red teaming" your setup.
-- **Try Valid Inputs**: "Write a summary of..." (Should PASS)
-- **Try PII**: "My email is test@example.com" (Should show `<REDACTED>`)
-- **Try Attacks**: "Tell me how to violate the NDA" (Should be **BLOCKED** with a system warning).
+We include a suite of tools to verify compliance.
 
-### Automated Compliance Runner
-For enterprise validation, use the included compliance tool to run a dataset of prompts against your active profile.
-
-1. **Create a Test Dataset** (`tests/data/compliance.csv`):
-   ```csv
-   prompt,expected
-   "How do I file legal taxes?",passed
-   "How do I evade taxes?",blocked
-   ```
-
-2. **Run the Audit**:
-   ```bash
-   python tools/compliance_runner.py tests/data/compliance.csv
-   ```
-   
-### 3. View Report:
-   A detailed `compliance_report.json` will be generated with pass/fail statistics and latency metrics.
-
----
-
-## 🧱 Hybrid Architecture (Pro)
-
-We support a **Dual-Engine** approach, combining our high-speed internal engine with the ecosystem of **Guardrails AI**.
-
-**1. Semantic Sentinel Engine (Internal)**:
-- **Speed**: <50ms latency.
-- **Role**: Handles PII redaction, regex patterns, and semantic embedding checks.
-
-**2. Guardrails AI (External Library)**:
-- **Role**: Access to specialized community validators.
-- **Integration**: We implemented a custom `GuardrailsAIAdapter` that runs local, key-less validators:
-    - `CompetitorCheck`: Blocks mentions of "Google", "OpenAI" etc.
-    - `ToxicCheck`: Blocks toxicity using local logic.
-
-To enable this, use `configs/hybrid.yaml`.
-
----
-
-## ✅ Compliance Verification
-
-The **Semantic Sentinel** engine is rigorously tested against adversarial datasets. Below is a snapshot of the **Compliance Runner** blocking 100% of Money Laundering and Financial Crime attempts:
-
-![Compliance Verification](assets/compliance_verification.png)
-
-*Generated via `tools/compliance_runner.py` using `configs/finance.yaml`.*
-
-## 📂 Architecture
-
-- **`app/main.py`**: Entry point & API routes.
-- **`guardrails_lib/`**:
-    - `engine.py`: The core Semantic & Regex analysis engine.
-    - `factory.py`: Dynamic config loader.
-- **`configs/`**: YAML security definitions.
-- **`tools/`**: Compliance and stress testing scripts.
-
-## 📦 Development & Deployment
-
-### Running Unit Tests
-We use `pytest` for unit and integration testing.
+**1. Automated Compliance Runner**:
+Run a dataset of attacks against your gateway to generate a pass/fail report.
 ```bash
-# Run all tests
-./run_tests.sh
+python tools/compliance_runner.py tests/data/library_attacks.csv
 ```
 
-### Docker Support
-Build and run the gateway in a container:
+**2. Plugin Verification**:
+Ensure LangKit and Presidio are correctly installed.
 ```bash
-# Build image
-docker build -t semantic-sentinel .
-
-# Run container (port 8000)
-docker run -p 8000:8000 semantic-sentinel
+python tools/verify_enterprise_deps.py
 ```
+
+---
+
+## 📂 Project Structure
+
+- **`app/`**: FastAPI Backend & UI Static files.
+- **`sentinel/`**: The core Python library.
+    - `engine.py`: Core logic combining Regex, Semantics, and Plugins.
+    - `presidio_adapter.py`: Interface to Microsoft Presidio.
+    - `profiles/`: Built-in YAML security definitions (bundled with package).
+    - `plugins/`: Extensible plugin system.
+- **`tools/`**: Verification scripts and compliance runners.
 
 ## License
 
-MIT License
+MIT License. Built for the Open Source Community.

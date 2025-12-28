@@ -1,15 +1,16 @@
 import yaml
 import logging
 from typing import Dict, Any, List
-from guardrails_lib.engine import GuardrailsEngine
-from guardrails_lib.core import BaseGuardrail
+from sentinel.engine import GuardrailsEngine
+from sentinel.core import BaseGuardrail
 
 # Import Guardrail Implementations
-# Note: In a larger framework, these could be dynamically imported via strings
-from examples.pii_guardrail import PIIGuardrail
-from examples.injection_guardrail import PromptInjectionGuardrail
-from examples.secret_guardrail import SecretDetectionGuardrail
-from guardrails_lib.topic_guardrail import TopicGuardrail
+from sentinel.defaults.pii_guardrail import PIIGuardrail
+from sentinel.defaults.injection_guardrail import PromptInjectionGuardrail
+from sentinel.defaults.secret_guardrail import SecretDetectionGuardrail
+from sentinel.topic_guardrail import TopicGuardrail
+
+import os
 
 logger = logging.getLogger("sentinel_factory")
 
@@ -17,6 +18,48 @@ class GuardrailsFactory:
     """
     Factory to create a GuardrailsEngine instance from a YAML configuration file.
     """
+
+    @staticmethod
+    def load(profile: str) -> GuardrailsEngine:
+        """
+        Syntactic sugar to load a profile by name (e.g. 'finance') or path.
+        """
+        # 1. Check if it's a direct path
+        if profile.endswith(".yaml") and os.path.exists(profile):
+            return GuardrailsFactory.load_from_file(profile)
+        
+        # 2. Check for packaged profiles (standard for pip installed)
+        try:
+            # For Python 3.9+ preferred API
+            from importlib import resources
+            resource_name = f"{profile}.yaml"
+            
+            # Using traverasable files API
+            files = resources.files('sentinel.profiles')
+            profile_path = files.joinpath(resource_name)
+            
+            if profile_path.is_file():
+                with resources.as_file(profile_path) as path:
+                    return GuardrailsFactory.load_from_file(str(path))
+        except ImportError:
+            # Fallback for older python or if importlib is fighting us
+            pass
+        except Exception as e:
+            logger.debug(f"Could not load from package resources: {e}")
+
+        # 3. Check standard config locations (Development/Fallback)
+        base_dir = os.getcwd() 
+        candidates = [
+            os.path.join(base_dir, "sentinel", "profiles", f"{profile}.yaml"), # New location dev
+            os.path.join(base_dir, "configs", f"{profile}.yaml"), # Old location fallback, might be empty now
+            os.path.join(base_dir, "configs", "custom", f"{profile}.yaml"), # Custom still lives here?
+        ]
+
+        for p in candidates:
+            if os.path.exists(p):
+                return GuardrailsFactory.load_from_file(p)
+        
+        raise FileNotFoundError(f"Could not find profile '{profile}' in package or {candidates}")
 
     @staticmethod
     def load_from_file(config_path: str) -> GuardrailsEngine:

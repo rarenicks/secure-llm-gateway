@@ -1,6 +1,6 @@
 import re
 from typing import Dict, Optional
-from guardrails_lib.core import BaseGuardrail, GuardrailResult
+from sentinel.core import BaseGuardrail, GuardrailResult
 
 class PIIGuardrail(BaseGuardrail):
     def __init__(self, pii_patterns: Optional[Dict[str, str]] = None):

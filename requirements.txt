@@ -10,3 +10,9 @@ scikit-learn
 guardrails-ai
 pytest
 pytest-asyncio
+presidio-analyzer
+presidio-anonymizer
+spacy
+whylogs[langkit]
+langkit
+detoxify

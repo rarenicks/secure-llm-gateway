@@ -1,5 +1,5 @@
 import pytest
-from guardrails_lib.engine import GuardrailsEngine
+from sentinel.engine import GuardrailsEngine
 
 # Mock config for testing
 @pytest.fixture

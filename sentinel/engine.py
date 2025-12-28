@@ -1,9 +1,11 @@
 from typing import List, Dict, Any, Optional
 import re
 import logging
-from guardrails_lib.core import BaseGuardrail, GuardrailResult
-from guardrails_lib.topic_guardrail import TopicGuardrail
-from guardrails_lib.integration import GuardrailsAIAdapter
+from sentinel.core import BaseGuardrail, GuardrailResult
+from sentinel.topic_guardrail import TopicGuardrail
+from sentinel.integration import GuardrailsAIAdapter
+from sentinel.presidio_adapter import PresidioAdapter
+from sentinel.plugins.langkit_plugin import LangKitPlugin
 
 try:
     from sentence_transformers import SentenceTransformer
@@ -24,8 +26,9 @@ class GuardrailsEngine:
     v2.0 Semantic Sentinel Engine
     - Pre-compiled Regex (Performance)
     - Semantic Analysis (Sentence Transformers)
-    - PII Redaction
+    - PII Redaction (Regex or Presidio)
     - Injection & Leakage Protection
+    - Pluggable Architecture (LangKit, etc.)
     """
 
     def __init__(self, config: Dict[str, Any]):
@@ -33,20 +36,36 @@ class GuardrailsEngine:
         self.detectors = config.get("detectors", {})
         self.profile_name = config.get("profile_name", "Unknown")
 
-        # --- 1. Pre-compile PII Patterns ---
+        # --- 1. PII Redaction (Regex vs Presidio) ---
+        self.pii_enabled = self.detectors.get("pii", {}).get("enabled", False)
+        self.pii_engine_type = self.detectors.get("pii", {}).get("engine", "regex")
+        
         self.pii_patterns = []
-        if self.detectors.get("pii", {}).get("enabled", False):
-            patterns = {
-                "EMAIL": r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",
-                "PHONE": r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b",
-                "SSN": r"\b\d{3}-\d{2}-\d{4}\b",
-                "CREDIT_CARD": r"\b(?:\d{4}[-\s]?){3}\d{4}\b"
-            }
-            enabled_keys = self.detectors["pii"].get("patterns", [])
-            for key in enabled_keys:
-                if key in patterns:
-                    self.pii_patterns.append((key, re.compile(patterns[key])))
-            logger.info(f"[{self.profile_name}] PII: Compiled {len(self.pii_patterns)} patterns.")
+        self.presidio = None
+
+        if self.pii_enabled:
+            if self.pii_engine_type == "presidio":
+                # Initialize Enterprise Presidio
+                self.presidio = PresidioAdapter()
+                if not self.presidio.enabled:
+                    logger.warning("Presidio requested but not available. Falling back to Regex.")
+                    self.pii_engine_type = "regex"
+                else:
+                    logger.info(f"[{self.profile_name}] PII: Using Enterprise Presidio Engine.")
+            
+            if self.pii_engine_type == "regex":
+                # Fallback / Standard Regex
+                patterns = {
+                    "EMAIL": r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",
+                    "PHONE": r"\b\d{3}[-.]?\d{3}[-.]?\d{4}\b",
+                    "SSN": r"\b\d{3}-\d{2}-\d{4}\b",
+                    "CREDIT_CARD": r"\b(?:\d{4}[-\s]?){3}\d{4}\b"
+                }
+                enabled_keys = self.detectors["pii"].get("patterns", [])
+                for key in enabled_keys:
+                    if key in patterns:
+                        self.pii_patterns.append((key, re.compile(patterns[key])))
+                logger.info(f"[{self.profile_name}] PII: Compiled {len(self.pii_patterns)} regex patterns.")
 
         # --- 2. Pre-compile Topic/Keyword Patterns ---
         self.topic_pattern = None
@@ -99,6 +118,19 @@ class GuardrailsEngine:
         external_config = config.get("guardrails", {}).get("external_hub", {})
         self.external_guard = GuardrailsAIAdapter(external_config)
 
+        # --- 6. Dynamic Plugins ---
+        self.plugins = []
+        self._load_plugins(config.get("plugins", {}))
+
+
+    def _load_plugins(self, plugins_config: Dict[str, Any]):
+        """
+        Dynamically load supported plugins.
+        """
+        # 1. LangKit
+        langkit_cfg = plugins_config.get("langkit", {})
+        if langkit_cfg.get("enabled", False):
+            self.plugins.append(LangKitPlugin(langkit_cfg))
 
     def validate(self, text: str) -> GuardrailResult:
         """
@@ -123,7 +155,6 @@ class GuardrailsEngine:
         action = "allowed"
         if not is_valid:
             # If ONLY PII is triggered, we consider it "valid" (redacted) but log it
-            # This allows the request to proceed (or response to be returned) with redaction
             pii_only = all(t.startswith("PII:") for t in triggered)
             if pii_only:
                 is_valid = True
@@ -151,11 +182,19 @@ class GuardrailsEngine:
         semantic_score = 0.0
 
         # Step 1: PII Redaction (Both Input and Output)
-        for name, pattern in self.pii_patterns:
-            if pattern.search(sanitized_prompt):
-                msg = f"<{name}_REDACTED>"
-                sanitized_prompt = pattern.sub(msg, sanitized_prompt)
-                triggered.append(f"PII:{name}")
+        if self.pii_enabled:
+            if self.presidio and self.presidio.enabled:
+                # Use Enterprise Presidio
+                sanitized_prompt, pii_types = self.presidio.scan_and_redact(sanitized_prompt)
+                if pii_types:
+                    triggered.extend(pii_types)
+            else:
+                # Use Standard Regex
+                for name, pattern in self.pii_patterns:
+                    if pattern.search(sanitized_prompt):
+                        msg = f"<{name}_REDACTED>"
+                        sanitized_prompt = pattern.sub(msg, sanitized_prompt)
+                        triggered.append(f"PII:{name}")
 
         # Step 2: Injection/Leakage (Input Only)
         if source == "input" and self.injection_patterns:
@@ -163,17 +202,14 @@ class GuardrailsEngine:
                 if pat.search(sanitized_prompt):
                     triggered.append("Injection:System Prompt Override")
 
-        # Step 3: Keyword Blocking (Topics) - (Both? Maybe output too?)
-        # Let's assume we want to block blacklisted topics in output too (e.g. competitors)
+        # Step 3: Keyword Blocking (Topics)
         if self.topic_pattern:
             matches = self.topic_pattern.findall(sanitized_prompt)
             if matches:
                 unique = sorted(list(set(matches)))
                 triggered.append(f"Topic:{','.join(unique)}")
 
-        # Step 4: Semantic Blocking (Input Only typically)
-        # Semantic search is expensive, maybe skip for output unless critical?
-        # For now, let's keep it input only to save latency on response
+        # Step 4: Semantic Blocking (Input Only)
         if source == "input" and self.semantic_model and self.forbidden_embeddings is not None:
             prompt_emb = self.semantic_model.encode([sanitized_prompt])
             scores = cosine_similarity(prompt_emb, self.forbidden_embeddings)[0]
@@ -186,13 +222,18 @@ class GuardrailsEngine:
             logger.info(f"Semantic Check ({source}): Score={max_score:.4f} Threshold={self.semantic_threshold}")
 
         # Step 5: External Guardrails Check
-        if self.external_guard.enabled:
-            # Maybe adapter handles source logic? or just valid method?
-            # Assuming input only for external for now
-            if source == "input":
-                ext_error = self.external_guard.validate(sanitized_prompt)
-                if ext_error:
-                    triggered.append(f"External: {ext_error}")
+        if self.external_guard.enabled and source == "input":
+            ext_error = self.external_guard.validate(sanitized_prompt)
+            if ext_error:
+                triggered.append(f"External: {ext_error}")
+
+        # Step 6: Plugins (e.g. LangKit)
+        # We run plugins last or based on logic.
+        for plugin in self.plugins:
+            # Plugins might support 'source' check in future, currently BasePlugin.scan(text)
+            err = plugin.scan(sanitized_prompt)
+            if err:
+                 triggered.append(f"Plugin:{err}")
 
         return {
             "sanitized_prompt": sanitized_prompt,

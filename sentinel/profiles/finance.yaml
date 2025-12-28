@@ -1,4 +1,5 @@
 profile_name: "Finance_v1"
+description: "Strict financial compliance profile. Blocks insider trading terms, stock tips, and sensitive financial PII using semantic analysis."
 detectors:
   pii:
     enabled: true

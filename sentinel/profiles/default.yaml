@@ -1,4 +1,5 @@
 profile_name: "Default_v1"
+description: "Standard baseline protection against PII (Regex) and Injection attacks. Perfect for general experimentation."
 detectors:
   pii:
     enabled: true

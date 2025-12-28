@@ -3,11 +3,187 @@ document.addEventListener('DOMContentLoaded', () => {
     const promptInput = document.getElementById('prompt-input');
     const sendBtn = document.getElementById('send-btn');
     const modelSelect = document.getElementById('model-select');
+    const profileSelect = document.getElementById('profile-select');
     const logList = document.getElementById('log-list');
+
+    // Modals & Buttons
+    const infoBtn = document.getElementById('info-btn');
+    const createBtn = document.getElementById('create-btn');
+    const infoModal = document.getElementById('infoModal');
+    const createModal = document.getElementById('createModal');
+    const saveProfileBtn = document.getElementById('save-profile-btn');
+    const closeBtns = document.querySelectorAll('.close-btn');
 
     // State
     let currentModel = modelSelect.value;
     let lastProcessedLogId = 0; // Track processed logs for notifications
+    let allProfiles = []; // Store full profile metadata
+
+    // --- Profile Management ---
+
+    async function fetchProfiles() {
+        try {
+            const res = await fetch('/api/profiles');
+            const data = await res.json();
+            allProfiles = data.profiles; // Store for info modal
+
+            // Populate Select
+            profileSelect.innerHTML = '';
+
+            // Add groups: Base vs Custom
+            const baseGroup = document.createElement('optgroup');
+            baseGroup.label = "Standard Profiles";
+            const customGroup = document.createElement('optgroup');
+            customGroup.label = "Custom Profiles";
+
+            data.profiles.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p.path; // Use path as value
+                opt.textContent = p.name;
+                opt.selected = p.name === data.active_profile;
+
+                if (p.path.includes('custom/')) {
+                    customGroup.appendChild(opt);
+                } else {
+                    baseGroup.appendChild(opt);
+                }
+            });
+
+            if (baseGroup.children.length > 0) profileSelect.appendChild(baseGroup);
+            if (customGroup.children.length > 0) profileSelect.appendChild(customGroup);
+
+        } catch (e) {
+            console.error("Failed to fetch profiles", e);
+            showToast("Failed to load profiles", "error");
+        }
+    }
+
+    profileSelect.addEventListener('change', async (e) => {
+        const path = e.target.value;
+        try {
+            const res = await fetch('/api/profiles/switch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ profile_path: path })
+            });
+            const data = await res.json();
+            if (data.status === 'success') {
+                showToast(`Switched to ${data.active_profile}`);
+                addSystemMessage(`Security Profile switched to: ${data.active_profile}`);
+            }
+        } catch (e) {
+            showToast("Failed to switch profile", "error");
+        }
+    });
+
+    // --- Modal Interaction ---
+
+    // Open Info Modal
+    infoBtn.addEventListener('click', () => {
+        const activePath = profileSelect.value;
+        const profile = allProfiles.find(p => p.path === activePath);
+
+        if (profile) {
+            const contentDiv = document.getElementById('infoContent');
+            const features = profile.features && profile.features.length > 0
+                ? profile.features.map(f => `<span class="feature-tag">${f}</span>`).join('')
+                : '<span>Standard protections</span>';
+
+            contentDiv.innerHTML = `
+                <div style="margin-bottom: 20px;">
+                    <h3>${profile.name}</h3>
+                    <p style="margin-top: 8px; color: var(--text-primary);">${profile.description}</p>
+                </div>
+                <div style="margin-bottom: 20px;">
+                    <h4 style="margin-bottom: 8px; font-size: 0.9rem; color: var(--text-secondary);">Active Features</h4>
+                    <div>${features}</div>
+                </div>
+                <div>
+                    <h4 style="margin-bottom: 8px; font-size: 0.9rem; color: var(--text-secondary);">Configuration (Snippet)</h4>
+                    <pre style="background: var(--bg-input); padding: 12px; border-radius: 8px; overflow-x: auto; font-family: var(--font-mono); font-size: 0.85rem;">${JSON.stringify(profile.raw_config, null, 2).slice(0, 500)}...</pre>
+                </div>
+            `;
+            infoModal.classList.add('show');
+        }
+    });
+
+    // Open Create Modal
+    createBtn.addEventListener('click', () => {
+        // Pre-fill with template
+        document.getElementById('new-profile-yaml').value = `profile_name: "custom_v1"
+description: "My custom experiment"
+detectors:
+  pii:
+    enabled: true
+    patterns: 
+      - "PHONE"
+  injection:
+    enabled: true
+    keywords:
+      - "ignore previous instructions"
+  topics:
+    enabled: true
+    banned_topics:
+      - "politics"
+      - "competitors"
+`;
+        createModal.classList.add('show');
+    });
+
+    // Close Modals
+    closeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            infoModal.classList.remove('show');
+            createModal.classList.remove('show');
+        });
+    });
+
+    // Close on click outside
+    window.addEventListener('click', (e) => {
+        if (e.target.classList.contains('modal')) {
+            e.target.classList.remove('show');
+        }
+    });
+
+    // Save New Profile
+    saveProfileBtn.addEventListener('click', async () => {
+        const name = document.getElementById('new-profile-name').value.trim();
+        const yamlContent = document.getElementById('new-profile-yaml').value.trim();
+
+        if (!name || !yamlContent) {
+            showToast("Please provide name and config", "error");
+            return;
+        }
+
+        try {
+            saveProfileBtn.textContent = "Saving...";
+            const res = await fetch('/api/profiles/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: name, content: yamlContent })
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                showToast("Profile Created Successfully!");
+                createModal.classList.remove('show');
+                // Refresh list and switch
+                await fetchProfiles();
+                // Find new profile option
+                const newOption = Array.from(profileSelect.options).find(o => o.text.includes(name) || o.value.includes(name));
+                if (newOption) {
+                    profileSelect.value = newOption.value;
+                    profileSelect.dispatchEvent(new Event('change')); // Trigger switch
+                }
+            } else {
+                showToast(data.detail || "Failed to create", "error");
+            }
+        } catch (e) {
+            showToast("Error creating profile", "error");
+        } finally {
+            saveProfileBtn.textContent = "Save & Switch";
+        }
+    });
 
     // --- Interaction ---
 
@@ -191,4 +367,5 @@ document.addEventListener('DOMContentLoaded', () => {
     // Polling for logs every 2 seconds
     setInterval(fetchLogs, 2000);
     fetchLogs(); // Initial load
+    fetchProfiles(); // Load metadata
 });

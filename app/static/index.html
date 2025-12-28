@@ -42,9 +42,28 @@
 
                 <div class="setting-group">
                     <label>Security Profile</label>
-                    <select id="profile-select">
-                        <option value="" disabled>Loading...</option>
-                    </select>
+                    <div class="controls-row">
+                        <select id="profile-select">
+                            <option value="" disabled>Loading...</option>
+                        </select>
+                        <button class="icon-btn" id="info-btn" title="Profile Details">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10" />
+                                <line x1="12" y1="16" x2="12" y2="12" />
+                                <line x1="12" y1="8" x2="12.01" y2="8" />
+                            </svg>
+                        </button>
+                        <button class="icon-btn" id="create-btn" title="Create New Profile">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                stroke-linejoin="round">
+                                <line x1="12" y1="5" x2="12" y2="19" />
+                                <line x1="5" y1="12" x2="19" y2="12" />
+                            </svg>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="status-card">
@@ -94,9 +113,41 @@
         </aside>
     </div>
 
+    <!-- Modals -->
+    <div id="infoModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Profile Details</h2>
+                <button class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body" id="infoContent">
+                <!-- Dynamic Content -->
+            </div>
+        </div>
+    </div>
+
+    <div id="createModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Create Custom Profile</h2>
+                <button class="close-btn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="new-profile-name" class="builder-input"
+                    placeholder="Profile Name (e.g. strict-mode)">
+                <textarea id="new-profile-yaml" class="builder-textarea"
+                    placeholder="Paste YAML configuration here..."></textarea>
+                <p style="font-size: 0.8rem; margin-top: 8px;">Tip: Copy an existing profile to start.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="primary-btn" id="save-profile-btn">Save & Switch</button>
+            </div>
+        </div>
+    </div>
+
     <div id="toast-container" class="toast-container"></div>
 
-    <script src="app_v5.js"></script>
+    <script src="app.js"></script>
 </body>
 
 </html>

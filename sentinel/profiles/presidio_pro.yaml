@@ -1,0 +1,22 @@
+profile_name: "Enterprise_Pro_v2"
+description: "Enterprise-Grade PII protection using Microsoft Presidio and Spacy NLP models for context-aware redaction."
+detectors:
+  pii:
+    enabled: true
+    engine: "presidio" # Activates Microsoft Presidio Adapter
+    patterns: 
+      # These are now handled by Presidio's named entities, 
+      # but config structure is preserved for fallback.
+      - "EMAIL"
+      - "PHONE"
+  injection:
+    enabled: true
+    keywords:
+      - "ignore previous instructions"
+      - "system override"
+  semantic_blocking:
+    enabled: true
+    threshold: 0.25
+    forbidden_intents:
+      - "money laundering"
+      - "corporate espionage"

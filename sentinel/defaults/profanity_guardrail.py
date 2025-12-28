@@ -1,6 +1,6 @@
 from typing import List, Optional
 import re
-from guardrails_lib.core import BaseGuardrail, GuardrailResult
+from sentinel.core import BaseGuardrail, GuardrailResult
 
 class ProfanityGuardrail(BaseGuardrail):
     """

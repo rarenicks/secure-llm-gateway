@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from contextlib import asynccontextmanager
+import yaml # Added for parsing metadata
 
 # Local modules
 from app.core.logger import init_db, log_request, DB_FILE
@@ -20,9 +21,9 @@ from app.core.adapters import APIAdapter
 from app.core.rate_limit import RateLimitMiddleware
 
 # New Enterprise Library Imports
-from guardrails_lib.engine import GuardrailsEngine
-from guardrails_lib.core import GuardrailResult
-from guardrails_lib.factory import GuardrailsFactory
+from sentinel.engine import GuardrailsEngine
+from sentinel.core import GuardrailResult
+from sentinel.factory import GuardrailsFactory
 
 # Load environment variables
 load_dotenv()
@@ -36,13 +37,37 @@ router = LLMRouter()
 # --- Helpers ---
 
 def load_available_profiles():
-    """Scans configs/ directory for yaml files."""
+    """Scans configs/ directory for yaml files and extracts metadata."""
     profiles = []
     try:
-        files = glob.glob("configs/*.yaml")
+        # Scan both base configs and custom folder
+        path_patterns = ["configs/*.yaml", "configs/custom/*.yaml"]
+        files = []
+        for pat in path_patterns:
+            files.extend(glob.glob(pat))
+            
         for f in files:
             name = Path(f).name
-            profiles.append({"name": name, "path": f})
+            # Parse YAML for metadata
+            try:
+                with open(f, 'r') as stream:
+                    content = yaml.safe_load(stream) or {}
+                    
+                # Extract summary
+                description = content.get("description", "No description provided.")
+                detectors = content.get("detectors", {})
+                enabled_features = [k for k, v in detectors.items() if v.get("enabled", False)]
+                
+                profiles.append({
+                    "name": name, 
+                    "path": f,
+                    "description": description,
+                    "features": enabled_features,
+                    "raw_config": content
+                })
+            except Exception as e:
+                print(f"Skipping malformed config {f}: {e}")
+                
     except Exception as e:
         print(f"Error loading profiles: {e}")
     return profiles
@@ -121,25 +146,58 @@ async def switch_profile(data: Dict[str, str] = Body(...)):
     """Switches the active guardrails profile."""
     global guardrails, GUARDRAILS_PROFILE
     
-    profile_name = data.get("profile_name")
-    if not profile_name:
-        raise HTTPException(status_code=400, detail="profile_name required")
-        
-    # Security: Ensure we only load from configs/ directory
-    safe_name = Path(profile_name).name
-    path = f"configs/{safe_name}"
+    profile_path = data.get("profile_path") # Changed from profile_name to support paths
+    if not profile_path:
+        # Fallback for backward compatibility or direct name
+        name = data.get("profile_name")
+        if name:
+             profile_path = f"configs/{name}"
+             if not os.path.exists(profile_path):
+                 profile_path = f"configs/custom/{name}"
     
-    if not os.path.exists(path):
+    if not profile_path or not os.path.exists(profile_path):
          raise HTTPException(status_code=404, detail="Profile not found")
          
     try:
-        print(f"Switching Profile to: {path}")
-        new_engine = GuardrailsFactory.load_from_file(path)
+        print(f"Switching Profile to: {profile_path}")
+        new_engine = GuardrailsFactory.load_from_file(profile_path)
         guardrails = new_engine # Hot swap!
-        GUARDRAILS_PROFILE = path
-        return {"status": "success", "active_profile": safe_name}
+        GUARDRAILS_PROFILE = profile_path
+        return {"status": "success", "active_profile": Path(profile_path).name}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load profile: {str(e)}")
+
+@app.post("/api/profiles/create")
+async def create_profile(data: Dict[str, Any] = Body(...)):
+    """Creates a new custom profile YAML."""
+    filename = data.get("filename")
+    content = data.get("content") # Dictionary or YAML string
+    
+    if not filename or not content:
+        raise HTTPException(status_code=400, detail="Filename and content required")
+        
+    if not filename.endswith(".yaml"):
+        filename += ".yaml"
+        
+    # Security: Enforce configs/custom/
+    safe_name = Path(filename).name
+    save_path = f"configs/custom/{safe_name}"
+    
+    try:
+        # Validate logic: Try to parse it
+        if isinstance(content, str):
+            parsed = yaml.safe_load(content)
+        else:
+            parsed = content
+            
+        # Write to file
+        with open(save_path, 'w') as f:
+            yaml.dump(parsed, f, default_flow_style=False)
+            
+        return {"status": "success", "path": save_path, "message": "Profile created"}
+        
+    except Exception as e:
+         raise HTTPException(status_code=400, detail=f"Invalid Configuration: {str(e)}")
 
 @app.get("/api/logs")
 async def get_logs():
