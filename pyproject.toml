@@ -51,18 +51,16 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/rarenicks/secure-llm-gateway"
-Documentation = "https://github.com/rarenicks/secure-llm-gateway/tree/main/docs"
-Repository = "https://github.com/rarenicks/secure-llm-gateway"
-Issues = "https://github.com/rarenicks/secure-llm-gateway/issues"
-Changelog = "https://github.com/rarenicks/secure-llm-gateway/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/rarenicks/semantic-sentinel"
+Documentation = "https://github.com/rarenicks/semantic-sentinel/tree/main/docs"
+Repository = "https://github.com/rarenicks/semantic-sentinel"
+Issues = "https://github.com/rarenicks/semantic-sentinel/issues"
+Changelog = "https://github.com/rarenicks/semantic-sentinel/blob/main/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["sentinel"]
 
-# Ensure YAML profiles are included
-[tool.hatch.build.targets.wheel.force-include]
-"sentinel/profiles" = "sentinel/profiles"
+
 
 [tool.ruff]
 line-length = 88

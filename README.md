@@ -8,15 +8,15 @@ A production-ready, enterprise-grade security framework for Large Language Model
 
 ![Security Stream](assets/security_stream_v5.png)
 
+## 📚 Documentation
+
+Detailed guides and references:
+
+- 🚀 **[Getting Started](https://github.com/rarenicks/semantic-sentinel/blob/main/docs/getting_started.md)**: Installation and quick start guide.
+- ⚙️ **[Configuration Reference](https://github.com/rarenicks/semantic-sentinel/blob/main/docs/configuration.md)**: Deep dive into YAML security profiles.
+- 🔌 **[Plugins & Extensibility](https://github.com/rarenicks/semantic-sentinel/blob/main/docs/plugins.md)**: Using LangKit and custom validators.
+
 ## 🐍 Python Library Usage
-
-Install the framework directly into your Python application:
-
-```bash
-pip install .   # Install from source
-# OR
-pip install semantic-sentinel  # (Coming soon to PyPI)
-```
 
 ```python
 from sentinel.factory import GuardrailsFactory
