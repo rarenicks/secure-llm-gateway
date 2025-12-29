@@ -1,17 +1,33 @@
-![Semantic Sentinel Banner](assets/semantic_sentinel_banner.png)
 
 <h1 align="center">Semantic Sentinel</h1>
-<p align="center">Enterprise-Grade Security Framework for Large Language Models</p>
+
+![Semantic Sentinel Banner](assets/semantic_sentinel_banner.png)
 
 <p align="center">
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://www.python.org/downloads/release/python-3100/"><img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+"></a>
-  <a href="https://pypi.org/project/semantic-sentinel/"><img src="https://img.shields.io/badge/pypi-v0.0.1-blue.svg" alt="Package"></a>
+  <a href="https://pypi.org/project/semantic-sentinel/"><img src="https://img.shields.io/badge/pypi-v0.1.0-blue.svg" alt="Package"></a>
 </p>
 
 <p align="center">
 A production-ready, enterprise-grade security framework for Large Language Models (LLMs). Use it as a <strong>Standalone Gateway</strong> (Docker) or import it as a <strong>Python Library</strong> (<code>sentinel</code>) to build your own AI firewalls.
 </p>
+
+---
+
+## 📦 Installation
+
+### From PyPI (Library Usage)
+```bash
+pip install semantic-sentinel
+```
+
+### From Source (Development)
+```bash
+git clone https://github.com/rarenicks/semantic-sentinel.git
+cd semantic-sentinel
+pip install -e .
+```
 
 ---
 
@@ -26,7 +42,10 @@ Detailed guides and references:
 ## 🐍 Python Library Usage
 
 ```python
-from sentinel.factory import GuardrailsFactory
+from sentinel import GuardrailsFactory, download_spacy_model
+
+# 0. (First Run Only) Download necessary models for PII redaction
+# download_spacy_model("en_core_web_lg")
 
 # 1. Load a security profile (e.g. Finance, Healthcare)
 engine = GuardrailsFactory.load("finance")

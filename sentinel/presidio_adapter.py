@@ -1,5 +1,7 @@
 import logging
+import asyncio
 from typing import List, Dict, Tuple, Optional
+from functools import partial
 
 logger = logging.getLogger("sentinel_presidio")
 
@@ -87,3 +89,13 @@ class PresidioAdapter:
         except Exception as e:
             logger.error(f"Presidio Scan Failed: {e}")
             return text, []
+
+    async def scan_and_redact_async(self, text: str) -> Tuple[str, List[str]]:
+        """
+        Async wrapper for scan_and_redact. Runs in a separate thread to avoid blocking.
+        """
+        if not self.enabled:
+            return text, []
+        
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self.scan_and_redact, text)

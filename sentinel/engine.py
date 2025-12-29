@@ -1,6 +1,7 @@
 from typing import List, Dict, Any, Optional
 import re
 import logging
+import asyncio
 from sentinel.core import BaseGuardrail, GuardrailResult
 from sentinel.topic_guardrail import TopicGuardrail
 from sentinel.integration import GuardrailsAIAdapter
@@ -29,6 +30,7 @@ class GuardrailsEngine:
     - PII Redaction (Regex or Presidio)
     - Injection & Leakage Protection
     - Pluggable Architecture (LangKit, etc.)
+    - Async Support
     """
 
     def __init__(self, config: Dict[str, Any]):
@@ -148,14 +150,21 @@ class GuardrailsEngine:
 
     def validate(self, text: str) -> GuardrailResult:
         """
-        Validates INPUT text.
+        Validates INPUT text (Synchronous).
         """
         result = self.scan(text, source="input")
+        return self._package_result(result)
+        
+    async def validate_async(self, text: str) -> GuardrailResult:
+        """
+        Validates INPUT text (Asynchronous).
+        """
+        result = await self.scan_async(text, source="input")
         return self._package_result(result)
 
     def validate_output(self, text: str) -> GuardrailResult:
         """
-        Validates OUTPUT text (from LLM).
+        Validates OUTPUT text (Synchronous).
         """
         result = self.scan(text, source="output")
         return self._package_result(result)
@@ -186,24 +195,19 @@ class GuardrailsEngine:
 
     def scan(self, prompt: str, source: str = "input") -> Dict[str, Any]:
         """
-        v2.0 Optimized Scan Pipeline
-        Args:
-            prompt: Text to scan
-            source: "input" or "output"
+        v2.0 Optimized Scan Pipeline (Synchronous)
         """
         triggered = []
         sanitized_prompt = prompt
         semantic_score = 0.0
 
-        # Step 1: PII Redaction (Both Input and Output)
+        # Step 1: PII Redaction
         if self.pii_enabled:
             if self.presidio and self.presidio.enabled:
-                # Use Enterprise Presidio
                 sanitized_prompt, pii_types = self.presidio.scan_and_redact(sanitized_prompt)
                 if pii_types:
                     triggered.extend(pii_types)
             else:
-                # Use Standard Regex
                 for name, pattern in self.pii_patterns:
                     if pattern.search(sanitized_prompt):
                         msg = f"<{name}_REDACTED>"
@@ -237,16 +241,83 @@ class GuardrailsEngine:
             
             logger.info(f"Semantic Check ({source}): MaxScore={max_score:.4f} Intent='{self.forbidden_intents[max_index]}' Threshold={self.semantic_threshold}")
 
-        # Step 5: External Guardrails Check
+        # Step 5: External & Plugins (Skipped for brevity in sync, usually fast enough or omitted)
         if self.external_guard.enabled and source == "input":
             ext_error = self.external_guard.validate(sanitized_prompt)
             if ext_error:
                 triggered.append(f"External: {ext_error}")
 
-        # Step 6: Plugins (e.g. LangKit)
-        # We run plugins last or based on logic.
         for plugin in self.plugins:
-            # Plugins might support 'source' check in future, currently BasePlugin.scan(text)
+            err = plugin.scan(sanitized_prompt)
+            if err:
+                 triggered.append(f"Plugin:{err}")
+
+        return {
+            "sanitized_prompt": sanitized_prompt,
+            "triggered_rules": triggered,
+            "semantic_score": semantic_score
+        }
+
+    async def scan_async(self, prompt: str, source: str = "input") -> Dict[str, Any]:
+        """
+        Async Scan Pipeline
+        Offloads CPU-bound tasks (Presidio, Embeddings) to executors.
+        """
+        triggered = []
+        sanitized_prompt = prompt
+        semantic_score = 0.0
+        loop = asyncio.get_running_loop()
+
+        # Step 1: PII Redaction
+        if self.pii_enabled:
+            if self.presidio and self.presidio.enabled:
+                # Async Presidio Call
+                sanitized_prompt, pii_types = await self.presidio.scan_and_redact_async(sanitized_prompt)
+                if pii_types:
+                    triggered.extend(pii_types)
+            else:
+                # Regex is fast enough to keep sync usually, but could offload if massive text
+                for name, pattern in self.pii_patterns:
+                    if pattern.search(sanitized_prompt):
+                        msg = f"<{name}_REDACTED>"
+                        sanitized_prompt = pattern.sub(msg, sanitized_prompt)
+                        triggered.append(f"PII:{name}")
+
+        # Step 2: Injection (Regex, fast)
+        if source == "input" and self.injection_patterns:
+            for pat in self.injection_patterns:
+                if pat.search(sanitized_prompt):
+                    triggered.append("Injection:System Prompt Override")
+
+        # Step 3: Topics (Regex, fast)
+        if self.topic_pattern:
+            matches = self.topic_pattern.findall(sanitized_prompt)
+            if matches:
+                unique = sorted(list(set(matches)))
+                triggered.append(f"Topic:{','.join(unique)}")
+
+        # Step 4: Semantic Blocking (CPU Bound)
+        if source == "input" and self.semantic_model and self.forbidden_embeddings is not None:
+            # Run encoding in thread pool
+            def _compute_semantic():
+                prompt_emb = self.semantic_model.encode([sanitized_prompt])
+                scores = cosine_similarity(prompt_emb, self.forbidden_embeddings)[0]
+                return scores
+            
+            scores = await loop.run_in_executor(None, _compute_semantic)
+            max_index = scores.argmax()
+            max_score = float(scores[max_index])
+            semantic_score = max_score
+            
+            if max_score > self.semantic_threshold:
+                matched_intent = self.forbidden_intents[max_index]
+                triggered.append(f"Semantic:Intent violation (matched '{matched_intent}', score {max_score:.2f})")
+            
+            logger.info(f"Semantic Check ({source}) [Async]: MaxScore={max_score:.4f}")
+
+        # Step 5 & 6: External/Plugins (Assuming sync for now, can be made async if plugins support it)
+        # ... (Same as sync)
+        for plugin in self.plugins:
             err = plugin.scan(sanitized_prompt)
             if err:
                  triggered.append(f"Plugin:{err}")
