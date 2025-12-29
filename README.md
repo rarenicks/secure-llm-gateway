@@ -1,7 +1,7 @@
 
 <h1 align="center">Semantic Sentinel</h1>
 
-![Semantic Sentinel Banner](assets/semantic_sentinel_banner.png)
+![Semantic Sentinel Banner](https://raw.githubusercontent.com/rarenicks/semantic-sentinel/main/assets/semantic_sentinel_banner.png)
 
 <p align="center">
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
@@ -218,10 +218,10 @@ Values encoded in **YAML** files. Switch policies instantly without restarts:
 ## 📸 Screenshots
 
 ### Security Dashboard - Blocked Request
-![Dashboard showing blocked request](assets/dashboard_blocked.png)
+![Dashboard showing blocked request](https://raw.githubusercontent.com/rarenicks/semantic-sentinel/main/assets/dashboard_blocked.png)
 
 ### Compliance Verification
-![Compliance verification results](assets/compliance_verification.png)
+![Compliance verification results](https://raw.githubusercontent.com/rarenicks/semantic-sentinel/main/assets/compliance_verification.png)
 
 ---
 
