@@ -1,8 +1,9 @@
-__version__ = "0.0.1"
+__version__ = "1.0.0"
 
 from sentinel.factory import GuardrailsFactory
 from sentinel.utils import download_spacy_model
 from sentinel.streaming import StreamSanitizer
+from sentinel.audit import BaseAuditLogger, FileAuditLogger, ConsoleAuditLogger, NullAuditLogger
 
 # Optional integrations
 try:
@@ -17,5 +18,10 @@ except ImportError:
 
 try:
     from sentinel.integrations.openai import SentinelOpenAI, SentinelAsyncOpenAI
+except ImportError:
+    pass
+
+try:
+    from sentinel.integrations.huggingface import SentinelHFStreamer
 except ImportError:
     pass

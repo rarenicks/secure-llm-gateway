@@ -1,35 +1,39 @@
 # Changelog
 
-## [0.1.0] - 2025-12-29
+## [1.0.0] - 2025-12-29
+
+### 🎉 First Stable Release
+
+This release marks semantic-sentinel as production-ready with enterprise features.
 
 ### Added
-- **Async Support**: Full async/await support with `validate_async()` for non-blocking operations
-  - CPU-bound tasks (semantic encoding, Presidio) offloaded to executors
-  - Achieved ~150 req/s throughput in concurrent scenarios
-- **Streaming Sanitization**: `StreamSanitizer` class for real-time content filtering
-  - Sentence-boundary buffering maintains semantic context
-  - Works seamlessly with streaming LLM responses
-- **LangChain Integration**: Native `SentinelRunnable` for pipeline compatibility
-  - Drop-in Runnable for LangChain chains: `chain = prompt | sentinel | llm`
-  - Follows LangChain conventions (raises `ValueError` on blocked content)
-- **OpenAI Integration**: Native wrappers for OpenAI SDK with automatic guardrails
+- **Audit Logging**: Pluggable logging system for compliance
+  - `FileAuditLogger` - JSONL format for Splunk/Datadog ingestion
+  - `ConsoleAuditLogger` - Human-readable console output
+  - Logs: profile, action, reason, latency, shadow_mode status
+- **Shadow Mode**: Dry-run mode for safe policy rollout
+  - Set `shadow_mode: true` in profile config
+  - Detects and logs violations but does NOT block (`valid=True`)
+  - Actions marked as `shadow_block` for easy filtering
+- **CLI Tool**: Command-line interface for quick testing
+  - `sentinel scan --text "..." --profile finance`
+  - `sentinel list` - Show available profiles
+  - `sentinel setup` - Download required models
+- **HuggingFace Integration**: `SentinelHFStreamer` for local models
+  - Real-time sanitization during `model.generate()`
+  - Works with any HuggingFace Transformers model
+- **OpenAI Integration**: Native wrappers with streaming support
   - `SentinelOpenAI` (sync) and `SentinelAsyncOpenAI` (async)
-  - Supports streaming responses with real-time sanitization
-  - Drop-in replacement for `openai.OpenAI`/`openai.AsyncOpenAI`
-- **LlamaIndex Integration**: `SentinelNodePostprocessor` for RAG pipelines
-  - Sanitizes retrieved documents before LLM processing
-  - Configurable to either redact or drop blocked nodes
-- **Utility Functions**: Added `download_spacy_model()` helper for easier setup
-- **Presidio Async Wrapper**: `scan_and_redact_async()` for non-blocking PII scanning
-- **Optional Dependencies**: 
-  - Individual packages: `openai`, `llamaindex`, `langchain`
-  - All integrations: `pip install semantic-sentinel[integrations]`
-- **Examples**: Comprehensive demos for async, streaming, LangChain, and OpenAI integration
-- **Tests**: End-to-end integration test suite (`tests/test_integrations.py`)
+  - Automatic input validation and output sanitization
+- **LangChain Integration**: `SentinelRunnable` for chain pipelines
+- **LlamaIndex Integration**: `SentinelNodePostprocessor` for RAG
+- **Async Support**: `validate_async()` for non-blocking operations
+- **Streaming**: `StreamSanitizer` for real-time content filtering
 
 ### Changed
-- Updated `README.md` with installation instructions and async usage examples
-- Enhanced `__init__.py` to export new utilities and integrations
+- Made core dependencies lightweight (moved langkit, detoxify to `[plugins]`)
+- Added optional dependency groups: `[openai]`, `[langchain]`, `[llamaindex]`, `[plugins]`, `[all]`
+- Fixed image URLs for proper PyPI display
 
 ## [0.0.1] - 2025-12-28
 ### Added

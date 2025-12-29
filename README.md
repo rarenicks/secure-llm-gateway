@@ -6,7 +6,8 @@
 <p align="center">
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://www.python.org/downloads/release/python-3100/"><img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+"></a>
-  <a href="https://pypi.org/project/semantic-sentinel/"><img src="https://img.shields.io/badge/pypi-v0.1.0-blue.svg" alt="Package"></a>
+  <a href="https://pypi.org/project/semantic-sentinel/"><img src="https://img.shields.io/badge/pypi-v1.0.0-blue.svg" alt="Package"></a>
+  <a href="https://pepy.tech/project/semantic-sentinel"><img src="https://static.pepy.tech/badge/semantic-sentinel" alt="Downloads"></a>
 </p>
 
 <p align="center">
@@ -180,12 +181,47 @@ Install: `pip install semantic-sentinel[llamaindex]`
 
 ## 🚀 Key Features
 
-### 🛡️ Core Protections
-- **Semantic Intent Blocking**: Blocks adversarial attacks based on *intent* (e.g., "Money Laundering", "Insider Trading") using local embeddings (`sentence-transformers`), catching what keywords miss.
-- **Enterprise PII Redaction**:
-    - **Microsoft Presidio**: Context-aware redaction (NER) for high-accuracy masking of Names, Locations, and Dates.
-    - **Regex Fallback**: High-speed pattern matching for Credit Cards, SSNs, and Phones.
-- **Injection & Jailbreak Defense**: Instantly blocks prompts like "Ignore previous instructions" or "DAN Mode".
+#### 🏢 Enterprise Features
+
+#### Audit Logging
+Record every interaction, verdict, and latency for compliance.
+```python
+from sentinel.audit import FileAuditLogger
+
+# Logs to 'sentinel_audit.jsonl' for Splunk/Datadog ingestion
+audit_logger = FileAuditLogger("audit_logs.jsonl")
+engine = GuardrailsFactory.load("finance", audit_logger=audit_logger)
+```
+
+#### Shadow Mode (Dry Run)
+Test new security policies in production without blocking users.
+```yaml
+# In your profile.yaml
+profile_name: "Finance_v1"
+shadow_mode: true  # Detect and log, but do not block
+```
+Violations will be allowed (valid=True) but marked as `shadow_block` in logs.
+
+### 🤖 HuggingFace Integration
+Real-time sanitization for local model generation.
+```python
+from sentinel.integrations.huggingface import SentinelHFStreamer
+
+streamer = SentinelHFStreamer(tokenizer, engine)
+model.generate(..., streamer=streamer)
+
+for token in streamer:
+    print(token, end="") # Sanitized!
+```
+
+### 💻 CLI Usage
+```bash
+# Scan text directly
+sentinel scan --text "Buy some stocks now" --profile finance
+
+# List available profiles
+sentinel list
+```
 
 ### 🔌 Extensibility & Integrations
 - **Framework Support**: Native integrations for OpenAI, LangChain, and LlamaIndex

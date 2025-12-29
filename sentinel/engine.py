@@ -2,11 +2,13 @@ from typing import List, Dict, Any, Optional
 import re
 import logging
 import asyncio
+import time
 from sentinel.core import BaseGuardrail, GuardrailResult
 from sentinel.topic_guardrail import TopicGuardrail
 from sentinel.integration import GuardrailsAIAdapter
 from sentinel.presidio_adapter import PresidioAdapter
 from sentinel.plugins.langkit_plugin import LangKitPlugin
+from sentinel.audit import BaseAuditLogger, NullAuditLogger
 
 try:
     from sentence_transformers import SentenceTransformer
@@ -31,12 +33,18 @@ class GuardrailsEngine:
     - Injection & Leakage Protection
     - Pluggable Architecture (LangKit, etc.)
     - Async Support
+    - Audit Logging & Shadow Mode
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], audit_logger: Optional[BaseAuditLogger] = None):
         self.config = config
         self.detectors = config.get("detectors", {})
         self.profile_name = config.get("profile_name", "Unknown")
+        self.shadow_mode = config.get("shadow_mode", False)
+        self.audit_logger = audit_logger or NullAuditLogger()
+        
+        if self.shadow_mode:
+            logger.warning(f"[{self.profile_name}] SHADOW MODE ENABLED. Violations will be logged but NOT blocked.")
 
         # --- 1. PII Redaction (Regex vs Presidio) ---
         self.pii_enabled = self.detectors.get("pii", {}).get("enabled", False)
@@ -152,22 +160,73 @@ class GuardrailsEngine:
         """
         Validates INPUT text (Synchronous).
         """
-        result = self.scan(text, source="input")
-        return self._package_result(result)
+        start_time = time.time()
+        result_dict = self.scan(text, source="input")
+        duration_ms = (time.time() - start_time) * 1000
+        
+        final_result = self._package_result(result_dict)
+        
+        # Audit Log
+        self.audit_logger.log({
+            "profile": self.profile_name,
+            "source": "input",
+            "valid": final_result.valid,
+            "action": final_result.action,
+            "reason": final_result.reason,
+            "latency_ms": duration_ms,
+            "shadow_mode": self.shadow_mode,
+            "input_len": len(text)
+        })
+        
+        return final_result
         
     async def validate_async(self, text: str) -> GuardrailResult:
         """
         Validates INPUT text (Asynchronous).
         """
-        result = await self.scan_async(text, source="input")
-        return self._package_result(result)
+        start_time = time.time()
+        result_dict = await self.scan_async(text, source="input")
+        duration_ms = (time.time() - start_time) * 1000
+        
+        final_result = self._package_result(result_dict)
+
+        # Audit Log (Async safe since loggers are usually sync I/O or threaded)
+        # For high-scale, logger should be non-blocking too, but File/Console is fine here.
+        self.audit_logger.log({
+            "profile": self.profile_name,
+            "source": "input",
+            "valid": final_result.valid,
+            "action": final_result.action,
+            "reason": final_result.reason,
+            "latency_ms": duration_ms,
+            "shadow_mode": self.shadow_mode,
+            "input_len": len(text)
+        })
+        
+        return final_result
 
     def validate_output(self, text: str) -> GuardrailResult:
         """
         Validates OUTPUT text (Synchronous).
         """
-        result = self.scan(text, source="output")
-        return self._package_result(result)
+        start_time = time.time()
+        result_dict = self.scan(text, source="output")
+        duration_ms = (time.time() - start_time) * 1000
+        
+        final_result = self._package_result(result_dict)
+
+        self.audit_logger.log({
+            "profile": self.profile_name,
+            "source": "output",
+            "valid": final_result.valid,
+            "action": final_result.action,
+            "reason": final_result.reason,
+            "latency_ms": duration_ms,
+            "shadow_mode": self.shadow_mode,
+            "input_len": len(text)
+        })
+
+        return final_result
 
     def _package_result(self, result: Dict[str, Any]) -> GuardrailResult:
         triggered = result["triggered_rules"]
@@ -177,7 +236,6 @@ class GuardrailsEngine:
         
         action = "allowed"
         if not is_valid:
-            # If ONLY PII is triggered, we consider it "valid" (redacted) but log it
             pii_only = all(t.startswith("PII:") for t in triggered)
             if pii_only:
                 is_valid = True
@@ -185,6 +243,24 @@ class GuardrailsEngine:
                 action = "redacted"
             else:
                 action = "blocked"
+                
+                # SHADOW MODE LOGIC
+                if self.shadow_mode:
+                    # In shadow mode, we return VALID even if blocked.
+                    # We keep the 'reason' populated for the caller to know it *would* have been blocked.
+                    is_valid = True
+                    action = "shadow_block" 
+                    # We do NOT return sanitized text in shadow mode? 
+                    # Actually, usually you want to see if it works, so returning original might be better.
+                    # Let's return original text to be safe in shadow mode.
+                    # Wait, 'sanitized' might contain PII redactions. PII redaction usually IS desired even in shadow mode?
+                    # "Shadow Mode" typically refers to BLOCKING policies. PII redaction is a transform.
+                    # Let's assume PII redaction still happens (it's "valid" anyway), but BLOCKS are ignored.
+                    
+                    # If it was a block (not just PII), revert sanitized text to potentially unsafe original? 
+                    # No, safer to return the analyzed version but mark valid. 
+                    # BUT, if semantic block triggers, 'sanitized_prompt' is essentially the input.
+                    pass
         
         return GuardrailResult(
             valid=is_valid,

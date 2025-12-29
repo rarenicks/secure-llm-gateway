@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "semantic-sentinel"
-version = "0.1.0"
+version = "1.0.0"
 description = "Enterprise-grade Security Framework for LLMs"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -86,6 +86,9 @@ Documentation = "https://github.com/rarenicks/semantic-sentinel/tree/main/docs"
 Repository = "https://github.com/rarenicks/semantic-sentinel"
 Issues = "https://github.com/rarenicks/semantic-sentinel/issues"
 Changelog = "https://github.com/rarenicks/semantic-sentinel/blob/main/CHANGELOG.md"
+
+[project.scripts]
+sentinel = "sentinel.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["sentinel"]
