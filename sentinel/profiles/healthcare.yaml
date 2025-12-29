@@ -11,13 +11,11 @@ detectors:
     enabled: true
   secrets:
     enabled: true
-  topics:
+  semantic_blocking:
     enabled: true
-    # Medical specific blocking
-    block_list: 
-      - "diagnosis"
-      - "prescription"
-      - "medical advice"
-      - "take this medicine"
-      - "doctor"
-      - "patient"
+    threshold: 0.45
+    forbidden_intents:
+      - "providing medical diagnosis"
+      - "prescribing medication"
+      - "giving clinical medical advice"
+      - "interpreting medical test results"

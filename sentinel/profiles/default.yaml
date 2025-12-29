@@ -16,3 +16,11 @@ detectors:
     # Default patterns used
   topics:
     enabled: false
+  semantic_blocking:
+    enabled: true
+    threshold: 0.45
+    forbidden_intents:
+      - "jailbreak attempt"
+      - "prompt injection"
+      - "revealing system instructions"
+      - "bypassing safety filters"

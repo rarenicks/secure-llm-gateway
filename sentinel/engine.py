@@ -96,6 +96,17 @@ class GuardrailsEngine:
         self.semantic_model = None
         self.forbidden_embeddings = None
         self.semantic_threshold = 0.0
+        self.forbidden_intents = []
+        
+        # Base Jailbreak intents that are always checked if semantic analysis is enabled
+        self.BASE_JAILBREAK_INTENTS = [
+            "ignore previous instructions",
+            "jailbreak attempt",
+            "bypassing safety guardrails",
+            "revealing system prompt",
+            "acting as an unfiltered AI",
+            "performing restricted actions"
+        ]
         
         semantic_cfg = self.detectors.get("semantic_blocking", {})
         if semantic_cfg.get("enabled", False):
@@ -107,10 +118,13 @@ class GuardrailsEngine:
                     self.semantic_model = SentenceTransformer('all-MiniLM-L6-v2')
                     
                     intents = semantic_cfg.get("forbidden_intents", [])
-                    if intents:
-                        self.forbidden_embeddings = self.semantic_model.encode(intents)
-                        self.semantic_threshold = semantic_cfg.get("threshold", 0.8)
-                        logger.info(f"[{self.profile_name}] Semantic: Encoded {len(intents)} intents. Threshold: {self.semantic_threshold}")
+                    # Merge with base jailbreak intents for comprehensive protection
+                    self.forbidden_intents = list(set(intents + self.BASE_JAILBREAK_INTENTS))
+                    
+                    if self.forbidden_intents:
+                        self.forbidden_embeddings = self.semantic_model.encode(self.forbidden_intents)
+                        self.semantic_threshold = semantic_cfg.get("threshold", 0.45) # Default to a conservative 0.45 if enabled
+                        logger.info(f"[{self.profile_name}] Semantic: Encoded {len(self.forbidden_intents)} intents. Threshold: {self.semantic_threshold}")
                 except Exception as e:
                     logger.error(f"Failed to load Semantic Model: {e}")
 
@@ -213,13 +227,15 @@ class GuardrailsEngine:
         if source == "input" and self.semantic_model and self.forbidden_embeddings is not None:
             prompt_emb = self.semantic_model.encode([sanitized_prompt])
             scores = cosine_similarity(prompt_emb, self.forbidden_embeddings)[0]
-            max_score = float(max(scores))
+            max_index = scores.argmax()
+            max_score = float(scores[max_index])
             semantic_score = max_score
             
             if max_score > self.semantic_threshold:
-                triggered.append(f"Semantic:Intent violation ({max_score:.2f})")
+                matched_intent = self.forbidden_intents[max_index]
+                triggered.append(f"Semantic:Intent violation (matched '{matched_intent}', score {max_score:.2f})")
             
-            logger.info(f"Semantic Check ({source}): Score={max_score:.4f} Threshold={self.semantic_threshold}")
+            logger.info(f"Semantic Check ({source}): MaxScore={max_score:.4f} Intent='{self.forbidden_intents[max_index]}' Threshold={self.semantic_threshold}")
 
         # Step 5: External Guardrails Check
         if self.external_guard.enabled and source == "input":
